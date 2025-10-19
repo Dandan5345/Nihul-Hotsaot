@@ -80,11 +80,26 @@
                 <p class="text-lg text-slate-400 mb-10 max-w-2xl mx-auto">
                     נהלו את ההוצאות שלכם בפשטות, קבלו תובנות חכמות, והשיגו את היעדים הפיננסיים שלכם. הכל במקום אחד, מאובטח ונגיש.
                 </p>
-                <button id="create-tracker-btn" class="bg-amber-500 text-slate-900 font-bold py-3 px-8 rounded-full shadow-lg hover:bg-amber-400 transition-all transform hover:scale-105 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-3 mx-auto">
-                    <i class="fa-solid fa-plus"></i>
-                    <span>התחילו עכשיו (בחינם)</span>
-                </button>
+                <div class="flex flex-col items-center gap-4">
+                    <button id="create-tracker-btn" class="bg-amber-500 text-slate-900 font-bold py-3 px-8 rounded-full shadow-lg hover:bg-amber-400 transition-all transform hover:scale-105 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-3 w-fit">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>התחילו עכשיו (בחינם)</span>
+                    </button>
+                    <!-- NEW: "My Trackers" Button -->
+                    <button id="show-my-trackers-btn" class="hidden bg-slate-700 text-white font-semibold py-2 px-6 rounded-full hover:bg-slate-600 transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-list-check"></i>
+                        <span>כל המעקבים שלי</span>
+                    </button>
+                </div>
                 <p id="login-prompt" class="mt-4 text-sm text-slate-500 hidden">יש להתחבר כדי ליצור מעקב חדש.</p>
+                
+                <!-- NEW: "My Trackers" Container -->
+                <div id="my-trackers-container" class="hidden mt-12 max-w-2xl mx-auto text-right">
+                    <h3 class="text-2xl font-bold text-white mb-6">המעקבים שלי</h3>
+                    <div id="my-trackers-list" class="space-y-3">
+                        <!-- Trackers will be loaded here by JavaScript -->
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -207,10 +222,10 @@
             <h3 class="text-2xl font-bold mb-6 text-center">הגדרות</h3>
             <div id="settings-content">
                 <p class="text-slate-600 mb-4">בחר איזה מעקב ייפתח אוטומטית בכניסה לאתר.</p>
-                <div id="trackers-list" class="space-y-2 mb-4 max-h-60 overflow-y-auto">
+                <div id="trackers-list-settings" class="space-y-2 mb-4 max-h-60 overflow-y-auto">
                     <p class="text-slate-500 text-center">טוען מעקבים...</p>
                 </div>
-                 <div class="text-center text-sm text-slate-500" id="no-trackers-msg" style="display: none;">
+                 <div class="text-center text-sm text-slate-500" id="no-trackers-msg-settings" style="display: none;">
                     עדיין לא יצרת מעקבים.
                 </div>
             </div>
@@ -257,6 +272,10 @@
         const newTrackerModal = document.getElementById('new-tracker-modal');
         const settingsModal = document.getElementById('settings-modal');
         const authError = document.getElementById('auth-error');
+        // NEW DOM elements for My Trackers feature
+        const showMyTrackersBtn = document.getElementById('show-my-trackers-btn');
+        const myTrackersContainer = document.getElementById('my-trackers-container');
+        const myTrackersList = document.getElementById('my-trackers-list');
 
         // --- Toast Notification ---
         const showToast = (message, isError = false) => {
@@ -336,6 +355,7 @@
             createTrackerBtn.disabled = false;
             loginPrompt.classList.add('hidden');
             settingsBtn.classList.remove('hidden');
+            showMyTrackersBtn.classList.remove('hidden'); // Show the "My Trackers" button
         }
 
         function updateUIForLoggedOutUser() {
@@ -345,6 +365,8 @@
             createTrackerBtn.disabled = true;
             loginPrompt.classList.remove('hidden');
             settingsBtn.classList.add('hidden');
+            showMyTrackersBtn.classList.add('hidden'); // Hide the "My Trackers" button
+            myTrackersContainer.classList.add('hidden'); // Hide the list container on logout
         }
 
         // --- Auth Event Listeners ---
@@ -458,6 +480,50 @@
             }
         });
 
+        // --- "My Trackers" Home Page Logic ---
+        showMyTrackersBtn.addEventListener('click', () => {
+            const isHidden = myTrackersContainer.classList.contains('hidden');
+            if (isHidden) {
+                myTrackersContainer.classList.remove('hidden');
+                loadMyTrackers();
+            } else {
+                myTrackersContainer.classList.add('hidden');
+            }
+        });
+
+        async function loadMyTrackers() {
+            if (!auth.currentUser) return;
+            myTrackersList.innerHTML = `<p class="text-slate-400 text-center">טוען מעקבים...</p>`;
+
+            try {
+                const q = query(collection(db, "trackers"), where("ownerId", "==", auth.currentUser.uid));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    myTrackersList.innerHTML = `<p class="text-slate-400 text-center">עדיין לא יצרת מעקבים.</p>`;
+                    return;
+                }
+                
+                let trackersHtml = '';
+                querySnapshot.forEach((doc) => {
+                    const tracker = doc.data();
+                    trackersHtml += `
+                        <a href="mahakv.html?id=${doc.id}" class="bg-slate-800/50 block p-4 rounded-lg hover:bg-slate-700/70 transition-colors">
+                            <div class="flex justify-between items-center">
+                                <span class="font-semibold text-white">${tracker.name}</span>
+                                <i class="fa-solid fa-arrow-left text-slate-400"></i>
+                            </div>
+                        </a>
+                    `;
+                });
+                myTrackersList.innerHTML = trackersHtml;
+            } catch (error) {
+                console.error("Error loading my trackers:", error);
+                myTrackersList.innerHTML = `<p class="text-red-400 text-center">שגיאה בטעינת המעקבים.</p>`;
+            }
+        }
+
+
         // --- Settings Modal Logic ---
         settingsBtn.addEventListener('click', async () => {
              if (!auth.currentUser) return;
@@ -468,8 +534,8 @@
         document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
         
         async function loadTrackersForSettings(userId) {
-            const listElement = document.getElementById('trackers-list');
-            const noTrackersMsg = document.getElementById('no-trackers-msg');
+            const listElement = document.getElementById('trackers-list-settings');
+            const noTrackersMsg = document.getElementById('no-trackers-msg-settings');
             listElement.innerHTML = `<p class="text-slate-500 text-center">טוען מעקבים...</p>`;
             noTrackersMsg.style.display = 'none';
 
@@ -542,5 +608,4 @@
     </script>
 </body>
 </html>
-
 
