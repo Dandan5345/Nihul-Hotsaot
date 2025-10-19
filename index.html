@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מעקב הוצאות</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -16,6 +17,16 @@
         .modal-content {
             transition: transform 0.3s ease;
         }
+        /* Password validation styles */
+        .req-list li.valid {
+            color: #16a34a; /* green-600 */
+        }
+        .req-list li.valid i {
+            color: #16a34a;
+        }
+        .req-list li.invalid {
+            color: #9ca3af; /* gray-400 */
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -26,10 +37,7 @@
             <h1 class="text-xl font-bold text-indigo-600">מעקב הוצאות</h1>
             <div class="flex items-center space-x-4 space-x-reverse">
                 <button id="settings-btn" class="hidden text-gray-600 hover:text-indigo-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 </button>
                 <div id="auth-container">
                     <!-- This will be populated by JavaScript -->
@@ -50,18 +58,76 @@
         <p id="login-prompt" class="mt-4 text-sm text-gray-500 hidden">יש להתחבר כדי ליצור מעקב חדש.</p>
     </main>
 
-    <!-- Login Modal -->
-    <div id="login-modal" class="modal invisible opacity-0 fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="modal-content transform -translate-y-10 bg-white rounded-lg shadow-2xl p-8 max-w-sm w-full text-center">
-            <h3 class="text-2xl font-bold mb-4">התחברות</h3>
-            <p class="text-gray-600 mb-6">כדי ליצור ולשמור את המעקבים שלך, יש להתחבר לחשבון.</p>
-            <button id="google-login-btn" class="bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-gray-100 flex items-center justify-center w-full">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" class="w-5 h-5 ml-3">
-                התחבר עם גוגל
-            </button>
-            <button id="close-login-modal" class="mt-6 text-sm text-gray-500 hover:text-gray-700">סגור</button>
+    <!-- Login/Register Modal -->
+    <div id="auth-modal" class="modal invisible opacity-0 fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="modal-content transform -translate-y-10 bg-white rounded-lg shadow-2xl p-8 max-w-sm w-full">
+            <!-- Login View -->
+            <div id="login-view">
+                <h3 class="text-2xl font-bold mb-6 text-center">התחברות</h3>
+                <form id="login-form" class="space-y-4">
+                    <div>
+                        <label for="login-email" class="block text-sm font-medium text-gray-700 mb-1">אימייל</label>
+                        <input type="email" id="login-email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">סיסמה</label>
+                        <input type="password" id="login-password" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700">התחבר</button>
+                </form>
+                <div class="relative flex py-5 items-center">
+                    <div class="flex-grow border-t border-gray-300"></div>
+                    <span class="flex-shrink mx-4 text-gray-400 text-sm">או</span>
+                    <div class="flex-grow border-t border-gray-300"></div>
+                </div>
+                <button id="google-login-btn" class="bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-gray-100 flex items-center justify-center w-full">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" class="w-5 h-5 ml-3">
+                    המשך עם גוגל
+                </button>
+                <p class="mt-6 text-center text-sm">
+                    אין לך חשבון? <button id="show-register-view" class="font-semibold text-indigo-600 hover:underline">הרשמה</button>
+                </p>
+            </div>
+
+            <!-- Register View -->
+            <div id="register-view" class="hidden">
+                 <h3 class="text-2xl font-bold mb-6 text-center">הרשמה</h3>
+                 <form id="register-form" class="space-y-4">
+                    <div class="flex gap-4">
+                        <div>
+                             <label for="register-firstname" class="block text-sm font-medium text-gray-700 mb-1">שם פרטי</label>
+                            <input type="text" id="register-firstname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div>
+                             <label for="register-lastname" class="block text-sm font-medium text-gray-700 mb-1">שם משפחה</label>
+                            <input type="text" id="register-lastname" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="register-email" class="block text-sm font-medium text-gray-700 mb-1">אימייל</label>
+                        <input type="email" id="register-email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="register-password" class="block text-sm font-medium text-gray-700 mb-1">סיסמה</label>
+                        <input type="password" id="register-password" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                     <ul id="password-reqs" class="text-xs text-right space-y-1 req-list">
+                        <li id="req-length" class="invalid"><i class="fa-solid fa-xmark ml-1"></i>לפחות 8 תווים</li>
+                        <li id="req-uppercase" class="invalid"><i class="fa-solid fa-xmark ml-1"></i>אות גדולה אחת לפחות (A-Z)</li>
+                        <li id="req-number" class="invalid"><i class="fa-solid fa-xmark ml-1"></i>מספר אחד לפחות (0-9)</li>
+                        <li id="req-special" class="invalid"><i class="fa-solid fa-xmark ml-1"></i>סימן מיוחד אחד לפחות (!@#$)</li>
+                    </ul>
+                    <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700">צור חשבון</button>
+                 </form>
+                 <p class="mt-6 text-center text-sm">
+                    יש לך כבר חשבון? <button id="show-login-view" class="font-semibold text-indigo-600 hover:underline">התחברות</button>
+                 </p>
+            </div>
+             <p id="auth-error" class="text-red-500 text-sm text-center mt-4 h-4"></p>
+             <button id="close-auth-modal" class="mt-4 text-sm text-gray-500 hover:text-gray-700 w-full text-center">סגור</button>
         </div>
     </div>
+
 
     <!-- New Tracker Modal -->
     <div id="new-tracker-modal" class="modal invisible opacity-0 fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
@@ -85,7 +151,6 @@
             <div id="settings-content">
                 <p class="text-gray-600 mb-4">בחר איזה מעקב ייפתח אוטומטית בכניסה לאתר.</p>
                 <div id="trackers-list" class="space-y-2 mb-4 max-h-60 overflow-y-auto">
-                    <!-- Trackers list will be populated here -->
                     <p class="text-gray-500 text-center">טוען מעקבים...</p>
                 </div>
                  <div class="text-center text-sm text-gray-500" id="no-trackers-msg" style="display: none;">
@@ -103,10 +168,30 @@
     <script type="module">
         // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { 
+            getAuth, 
+            GoogleAuthProvider, 
+            signInWithPopup, 
+            onAuthStateChanged, 
+            signOut,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            updateProfile,
+            getRedirectResult
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc, 
+            addDoc, 
+            collection, 
+            query, 
+            where, 
+            getDocs, 
+            serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCkhBZZldZTG5NDPI-2XJmkBZ4_uH8WQwo",
             authDomain: "mahakv-7b8ac.firebaseapp.com",
@@ -117,63 +202,79 @@
             measurementId: "G-2F7JMV53H3"
         };
         
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        
-        const appId = 'mahakv-app'; // Static app id for this project
 
-        // DOM Elements
+        // --- DOM Elements ---
         const authContainer = document.getElementById('auth-container');
         const createTrackerBtn = document.getElementById('create-tracker-btn');
         const loginPrompt = document.getElementById('login-prompt');
         const settingsBtn = document.getElementById('settings-btn');
-
-        // Modal Elements
-        const loginModal = document.getElementById('login-modal');
+        const authModal = document.getElementById('auth-modal');
         const newTrackerModal = document.getElementById('new-tracker-modal');
         const settingsModal = document.getElementById('settings-modal');
+        const authError = document.getElementById('auth-error');
 
-        // --- Modal Control Functions ---
+        // --- Modal Control ---
         const openModal = (modal) => {
             modal.classList.remove('invisible', 'opacity-0');
             modal.querySelector('.modal-content').classList.remove('-translate-y-10');
         };
-
         const closeModal = (modal) => {
             modal.classList.add('invisible', 'opacity-0');
             modal.querySelector('.modal-content').classList.add('-translate-y-10');
         };
 
-        // --- Authentication ---
-        let isInitialAuthCheck = true; // BUG FIX: Flag to check for redirect only on initial page load
+        // --- User Profile Handling ---
+        const createUserProfileDocument = async (user, additionalData = {}) => {
+            if (!user) return;
+            const userRef = doc(db, `users/${user.uid}`);
+            const snapshot = await getDoc(userRef);
 
-        onAuthStateChanged(auth, user => {
+            if (!snapshot.exists()) {
+                const { displayName, email } = user;
+                const createdAt = new Date();
+                try {
+                    await setDoc(userRef, {
+                        displayName,
+                        email,
+                        createdAt,
+                        ...additionalData
+                    });
+                } catch (error) {
+                    console.error("Error creating user profile document", error);
+                }
+            }
+        };
+
+        // --- Authentication State Management ---
+        let isInitialAuthCheck = true; 
+        onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // User is signed in
                 console.log('User signed in:', user.uid);
+                await createUserProfileDocument(user); // Ensure profile exists
                 updateUIForLoggedInUser(user);
-                
-                // BUG FIX: Only check for a default tracker and redirect on the initial page load,
-                // not immediately after the user actively clicks the login button.
                 if (isInitialAuthCheck) {
-                    checkDefaultTracker(user.uid);
+                    await checkDefaultTracker(user.uid);
                 }
             } else {
-                // User is signed out
                 console.log('User signed out');
                 updateUIForLoggedOutUser();
             }
-            // Subsequent auth changes (like logging in/out) won't trigger the redirect.
-            isInitialAuthCheck = false; 
+            isInitialAuthCheck = false;
+        });
+        
+        // Handle Google Redirect Result
+        getRedirectResult(auth).catch(error => {
+            console.error("Error from getRedirectResult", error);
         });
 
 
         function updateUIForLoggedInUser(user) {
             authContainer.innerHTML = `
                 <div class="flex items-center space-x-2 space-x-reverse">
-                    <img src="${user.photoURL}" alt="${user.displayName}" class="w-8 h-8 rounded-full">
+                    <img src="${user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=random`}" alt="${user.displayName}" class="w-8 h-8 rounded-full">
                     <button id="logout-btn" class="bg-red-500 text-white text-sm font-semibold py-1 px-3 rounded-md hover:bg-red-600">התנתק</button>
                 </div>
             `;
@@ -185,32 +286,127 @@
         }
 
         function updateUIForLoggedOutUser() {
-            authContainer.innerHTML = `<button id="login-btn" class="bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600">התחבר</button>`;
-            document.getElementById('login-btn').addEventListener('click', () => openModal(loginModal));
+            authContainer.innerHTML = `<button id="login-btn" class="bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600">התחבר / הרשם</button>`;
+            document.getElementById('login-btn').addEventListener('click', () => openModal(authModal));
             
             createTrackerBtn.disabled = true;
             loginPrompt.classList.remove('hidden');
             settingsBtn.classList.add('hidden');
         }
-        
-        // --- Event Listeners ---
 
-        // Login Modal
+        // --- Auth Event Listeners ---
         document.getElementById('google-login-btn').addEventListener('click', async () => {
             const provider = new GoogleAuthProvider();
             try {
-                // signInWithPopup returns a result, which we wait for.
-                // The onAuthStateChanged listener will handle the UI update automatically.
+                // Using signInWithPopup for a better UX when not blocked
                 await signInWithPopup(auth, provider);
-                closeModal(loginModal);
+                closeModal(authModal);
             } catch (error) {
-                console.error("Error during Google sign-in:", error);
-                // The user might have closed the popup, which is fine.
+                console.error("Popup failed, maybe blocked:", error);
+                // Fallback or just notify user to enable popups
+                authError.textContent = "חלון ההתחברות נחסם. יש לאפשר חלונות קופצים.";
             }
         });
-        document.getElementById('close-login-modal').addEventListener('click', () => closeModal(loginModal));
 
-        // New Tracker Modal
+        document.getElementById('close-auth-modal').addEventListener('click', () => closeModal(authModal));
+
+        // View Toggling in Auth Modal
+        document.getElementById('show-register-view').addEventListener('click', () => {
+            document.getElementById('login-view').classList.add('hidden');
+            document.getElementById('register-view').classList.remove('hidden');
+            authError.textContent = '';
+        });
+        document.getElementById('show-login-view').addEventListener('click', () => {
+            document.getElementById('register-view').classList.add('hidden');
+            document.getElementById('login-view').classList.remove('hidden');
+            authError.textContent = '';
+        });
+        
+        // --- Email/Password Auth Forms ---
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            authError.textContent = '';
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                closeModal(authModal);
+            } catch (error) {
+                console.error("Login failed:", error.code);
+                if (error.code === 'auth/invalid-credential') {
+                    authError.textContent = 'אימייל או סיסמה שגויים.';
+                } else {
+                    authError.textContent = 'אירעה שגיאה. נסה שוב.';
+                }
+            }
+        });
+
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+             e.preventDefault();
+             authError.textContent = '';
+             if (!isPasswordValid(document.getElementById('register-password').value)) {
+                 authError.textContent = 'הסיסמה אינה עומדת בדרישות.';
+                 return;
+             }
+
+             const firstName = document.getElementById('register-firstname').value.trim();
+             const lastName = document.getElementById('register-lastname').value.trim();
+             const email = document.getElementById('register-email').value;
+             const password = document.getElementById('register-password').value;
+             const displayName = `${firstName} ${lastName}`;
+
+             try {
+                const { user } = await createUserWithEmailAndPassword(auth, email, password);
+                await updateProfile(user, { displayName });
+                await createUserProfileDocument(user, { firstName, lastName });
+                closeModal(authModal);
+             } catch (error) {
+                console.error("Registration failed:", error.code);
+                 if (error.code === 'auth/email-already-in-use') {
+                    authError.textContent = 'כתובת האימייל כבר קיימת במערכת.';
+                } else {
+                    authError.textContent = 'אירעה שגיאה ברישום. נסה שוב.';
+                }
+             }
+        });
+        
+        // --- Password Validation ---
+        const passwordInput = document.getElementById('register-password');
+        const reqs = {
+            length: document.getElementById('req-length'),
+            uppercase: document.getElementById('req-uppercase'),
+            number: document.getElementById('req-number'),
+            special: document.getElementById('req-special')
+        };
+        const validations = {
+            length: (p) => p.length >= 8,
+            uppercase: (p) => /[A-Z]/.test(p),
+            number: (p) => /[0-9]/.test(p),
+            special: (p) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(p)
+        };
+
+        function isPasswordValid(password) {
+            return Object.values(validations).every(validation => validation(password));
+        }
+        
+        passwordInput.addEventListener('input', () => {
+            const password = passwordInput.value;
+            for (const [key, validationFn] of Object.entries(validations)) {
+                const el = reqs[key];
+                if (validationFn(password)) {
+                    el.classList.add('valid');
+                    el.classList.remove('invalid');
+                    el.querySelector('i').className = 'fa-solid fa-check ml-1';
+                } else {
+                    el.classList.remove('valid');
+                    el.classList.add('invalid');
+                    el.querySelector('i').className = 'fa-solid fa-xmark ml-1';
+                }
+            }
+        });
+
+
+        // --- New Tracker Modal Logic ---
         createTrackerBtn.addEventListener('click', () => {
             if (!auth.currentUser) return;
             openModal(newTrackerModal);
@@ -223,23 +419,19 @@
             if (!trackerName || !auth.currentUser) return;
             
             try {
-                // Using a more structured path for multi-tenancy
-                const trackersCollectionPath = `trackers`;
-                const docRef = await addDoc(collection(db, trackersCollectionPath), {
+                const docRef = await addDoc(collection(db, "trackers"), {
                     name: trackerName,
                     ownerId: auth.currentUser.uid,
                     createdAt: serverTimestamp()
                 });
-                console.log("Document written with ID: ", docRef.id);
-                // Redirect to the new tracker page
                 window.location.href = `mahakv.html?id=${docRef.id}`;
             } catch (error) {
-                console.error("Error adding document: ", error);
-                alert("אירעה שגיאה ביצירת המעקב. נסה שוב.");
+                console.error("Error adding tracker: ", error);
+                alert("אירעה שגיאה ביצירת המעקב.");
             }
         });
 
-        // Settings Modal
+        // --- Settings Modal Logic ---
         settingsBtn.addEventListener('click', async () => {
              if (!auth.currentUser) return;
              openModal(settingsModal);
@@ -248,7 +440,6 @@
         document.getElementById('close-settings-modal').addEventListener('click', () => closeModal(settingsModal));
         document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
         
-
         async function loadTrackersForSettings(userId) {
             const listElement = document.getElementById('trackers-list');
             const noTrackersMsg = document.getElementById('no-trackers-msg');
@@ -256,13 +447,9 @@
             noTrackersMsg.style.display = 'none';
 
             try {
-                const trackersCollectionPath = `trackers`;
-                const q = query(collection(db, trackersCollectionPath), where("ownerId", "==", userId));
+                const q = query(collection(db, "trackers"), where("ownerId", "==", userId));
                 const querySnapshot = await getDocs(q);
-
-                // User-specific settings are stored in a 'users' collection
-                const settingsDocPath = `users/${userId}`;
-                const settingsDoc = await getDoc(doc(db, settingsDocPath));
+                const settingsDoc = await getDoc(doc(db, `users/${userId}`));
                 const currentDefault = settingsDoc.exists() ? settingsDoc.data().defaultTrackerId : null;
 
                 if (querySnapshot.empty) {
@@ -274,12 +461,11 @@
                 let trackersHtml = '<div class="flex items-center"><input type="radio" id="default-none" name="default-tracker" value="none" class="ml-2 focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300"><label for="default-none" class="w-full py-2 cursor-pointer">ללא (כניסה לדף הבית)</label></div>';
                 
                 querySnapshot.forEach((doc) => {
-                    const tracker = doc.data();
                     const isChecked = doc.id === currentDefault ? 'checked' : '';
                     trackersHtml += `
                         <div class="flex items-center p-2 rounded-md hover:bg-gray-100">
                            <input type="radio" id="${doc.id}" name="default-tracker" value="${doc.id}" ${isChecked} class="ml-2 focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300">
-                           <label for="${doc.id}" class="w-full py-2 cursor-pointer">${tracker.name}</label>
+                           <label for="${doc.id}" class="w-full py-2 cursor-pointer">${doc.data().name}</label>
                         </div>
                     `;
                 });
@@ -298,18 +484,13 @@
 
         async function saveSettings() {
              if (!auth.currentUser) return;
-
             const selectedTracker = document.querySelector('input[name="default-tracker"]:checked');
-            if (!selectedTracker) {
-                alert("יש לבחור אפשרות.");
-                return;
-            }
+            if (!selectedTracker) return;
 
             const defaultTrackerId = selectedTracker.value === 'none' ? null : selectedTracker.value;
             
             try {
-                const settingsDocPath = `users/${auth.currentUser.uid}`;
-                await setDoc(doc(db, settingsDocPath), { defaultTrackerId: defaultTrackerId }, { merge: true });
+                await setDoc(doc(db, `users/${auth.currentUser.uid}`), { defaultTrackerId }, { merge: true });
                 alert("ההגדרות נשמרו בהצלחה!");
                 closeModal(settingsModal);
             } catch (error) {
@@ -320,8 +501,7 @@
         
         async function checkDefaultTracker(userId) {
             try {
-                const settingsDocPath = `users/${userId}`;
-                const docSnap = await getDoc(doc(db, settingsDocPath));
+                const docSnap = await getDoc(doc(db, `users/${userId}`));
                 if (docSnap.exists()) {
                     const settings = docSnap.data();
                     if (settings.defaultTrackerId) {
@@ -335,7 +515,6 @@
         }
 
     </script>
-
 </body>
 </html>
 
