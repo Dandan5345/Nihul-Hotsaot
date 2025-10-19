@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מעקב הוצאות</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Assistant', sans-serif;
+        }
+        .modal {
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-content {
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm p-4">
+        <div class="container mx-auto flex justify-between items-center max-w-5xl">
+            <h1 class="text-xl font-bold text-indigo-600">מעקב הוצאות</h1>
+            <div class="flex items-center space-x-4 space-x-reverse">
+                <button id="settings-btn" class="hidden text-gray-600 hover:text-indigo-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+                <div id="auth-container">
+                    <!-- This will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto p-6 text-center max-w-3xl mt-10">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4">ניהול ההוצאות שלכם, בקלות.</h2>
+        <p class="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+            התחילו לעקוב אחר ההוצאות שלכם בצורה פשוטה ויעילה. צרו מעקב חדש, הזינו הוצאות, וקבלו שליטה מלאה על הכסף שלכם.
+        </p>
+        <button id="create-tracker-btn" class="bg-indigo-600 text-white font-bold py-4 px-8 rounded-lg shadow-lg hover:bg-indigo-700 transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:transform-none">
+            צור מעקב הוצאות חדש
+        </button>
+        <p id="login-prompt" class="mt-4 text-sm text-gray-500 hidden">יש להתחבר כדי ליצור מעקב חדש.</p>
+    </main>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal invisible opacity-0 fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="modal-content transform -translate-y-10 bg-white rounded-lg shadow-2xl p-8 max-w-sm w-full text-center">
+            <h3 class="text-2xl font-bold mb-4">התחברות</h3>
+            <p class="text-gray-600 mb-6">כדי ליצור ולשמור את המעקבים שלך, יש להתחבר לחשבון.</p>
+            <button id="google-login-btn" class="bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-6 rounded-lg shadow-sm hover:bg-gray-100 flex items-center justify-center w-full">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" class="w-5 h-5 ml-3">
+                התחבר עם גוגל
+            </button>
+            <button id="close-login-modal" class="mt-6 text-sm text-gray-500 hover:text-gray-700">סגור</button>
+        </div>
+    </div>
+
+    <!-- New Tracker Modal -->
+    <div id="new-tracker-modal" class="modal invisible opacity-0 fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="modal-content transform -translate-y-10 bg-white rounded-lg shadow-2xl p-8 max-w-sm w-full">
+            <h3 class="text-2xl font-bold mb-6 text-center">יצירת מעקב חדש</h3>
+            <form id="new-tracker-form">
+                <label for="tracker-name" class="block text-sm font-medium text-gray-700 mb-2">שם המעקב</label>
+                <input type="text" id="tracker-name" name="tracker-name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="לדוגמה: הוצאות חודש יוני">
+                <div class="mt-6 flex justify-between items-center">
+                    <button type="button" id="close-new-tracker-modal" class="text-sm text-gray-500 hover:text-gray-700">ביטול</button>
+                    <button type="submit" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700">צור</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal invisible opacity-0 fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="modal-content transform -translate-y-10 bg-white rounded-lg shadow-2xl p-8 max-w-md w-full">
+            <h3 class="text-2xl font-bold mb-6 text-center">הגדרות</h3>
+            <div id="settings-content">
+                <p class="text-gray-600 mb-4">בחר איזה מעקב ייפתח אוטומטית בכניסה לאתר.</p>
+                <div id="trackers-list" class="space-y-2 mb-4 max-h-60 overflow-y-auto">
+                    <!-- Trackers list will be populated here -->
+                    <p class="text-gray-500 text-center">טוען מעקבים...</p>
+                </div>
+                 <div class="text-center text-sm text-gray-500" id="no-trackers-msg" style="display: none;">
+                    עדיין לא יצרת מעקבים.
+                </div>
+            </div>
+            <div class="mt-6 flex justify-between items-center">
+                <button type="button" id="close-settings-modal" class="text-sm text-gray-500 hover:text-gray-700">סגור</button>
+                <button id="save-settings-btn" class="bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700">שמור</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script type="module">
+        // Firebase Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Provided Firebase configuration
+        const userProvidedConfig = {
+            apiKey: "AIzaSyCkhBZZldZTG5NDPI-2XJmkBZ4_uH8WQwo",
+            authDomain: "mahakv-7b8ac.firebaseapp.com",
+            projectId: "mahakv-7b8ac",
+            storageBucket: "mahakv-7b8ac.firebasestorage.app",
+            messagingSenderId: "381504704523",
+            appId: "1:381504704523:web:83ccd44d67f149f485770e",
+            measurementId: "G-2F7JMV53H3"
+        };
+        
+        // Use environment config if available, otherwise fall back to user-provided config
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userProvidedConfig;
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mahakv-app';
+
+        // DOM Elements
+        const authContainer = document.getElementById('auth-container');
+        const createTrackerBtn = document.getElementById('create-tracker-btn');
+        const loginPrompt = document.getElementById('login-prompt');
+        const settingsBtn = document.getElementById('settings-btn');
+
+        // Modal Elements
+        const loginModal = document.getElementById('login-modal');
+        const newTrackerModal = document.getElementById('new-tracker-modal');
+        const settingsModal = document.getElementById('settings-modal');
+
+        // --- Modal Control Functions ---
+        const openModal = (modal) => {
+            modal.classList.remove('invisible', 'opacity-0');
+            modal.querySelector('.modal-content').classList.remove('-translate-y-10');
+        };
+
+        const closeModal = (modal) => {
+            modal.classList.add('invisible', 'opacity-0');
+            modal.querySelector('.modal-content').classList.add('-translate-y-10');
+        };
+
+        // --- Authentication ---
+        onAuthStateChanged(auth, user => {
+            if (user) {
+                // User is signed in
+                console.log('User signed in:', user.uid);
+                updateUIForLoggedInUser(user);
+                checkDefaultTracker(user.uid);
+            } else {
+                // User is signed out
+                console.log('User signed out');
+                updateUIForLoggedOutUser();
+            }
+        });
+
+        function updateUIForLoggedInUser(user) {
+            authContainer.innerHTML = `
+                <div class="flex items-center space-x-2 space-x-reverse">
+                    <img src="${user.photoURL}" alt="${user.displayName}" class="w-8 h-8 rounded-full">
+                    <button id="logout-btn" class="bg-red-500 text-white text-sm font-semibold py-1 px-3 rounded-md hover:bg-red-600">התנתק</button>
+                </div>
+            `;
+            document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+            
+            createTrackerBtn.disabled = false;
+            loginPrompt.classList.add('hidden');
+            settingsBtn.classList.remove('hidden');
+        }
+
+        function updateUIForLoggedOutUser() {
+            authContainer.innerHTML = `<button id="login-btn" class="bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600">התחבר</button>`;
+            document.getElementById('login-btn').addEventListener('click', () => openModal(loginModal));
+            
+            createTrackerBtn.disabled = true;
+            loginPrompt.classList.remove('hidden');
+            settingsBtn.classList.add('hidden');
+        }
+        
+        // --- Event Listeners ---
+
+        // Login Modal
+        document.getElementById('google-login-btn').addEventListener('click', async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+                closeModal(loginModal);
+            } catch (error) {
+                console.error("Error during Google sign-in:", error);
+            }
+        });
+        document.getElementById('close-login-modal').addEventListener('click', () => closeModal(loginModal));
+
+        // New Tracker Modal
+        createTrackerBtn.addEventListener('click', () => {
+            if (!auth.currentUser) return;
+            openModal(newTrackerModal);
+        });
+        document.getElementById('close-new-tracker-modal').addEventListener('click', () => closeModal(newTrackerModal));
+        
+        document.getElementById('new-tracker-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const trackerName = document.getElementById('tracker-name').value.trim();
+            if (!trackerName || !auth.currentUser) return;
+            
+            try {
+                const trackersCollectionPath = `/artifacts/${appId}/public/data/trackers`;
+                const docRef = await addDoc(collection(db, trackersCollectionPath), {
+                    name: trackerName,
+                    ownerId: auth.currentUser.uid,
+                    createdAt: serverTimestamp()
+                });
+                console.log("Document written with ID: ", docRef.id);
+                window.location.href = `mahakv.html?id=${docRef.id}`;
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                alert("אירעה שגיאה ביצירת המעקב. נסה שוב.");
+            }
+        });
+
+        // Settings Modal
+        settingsBtn.addEventListener('click', async () => {
+             if (!auth.currentUser) return;
+             openModal(settingsModal);
+             await loadTrackersForSettings(auth.currentUser.uid);
+        });
+        document.getElementById('close-settings-modal').addEventListener('click', () => closeModal(settingsModal));
+        document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+        
+
+        async function loadTrackersForSettings(userId) {
+            const listElement = document.getElementById('trackers-list');
+            const noTrackersMsg = document.getElementById('no-trackers-msg');
+            listElement.innerHTML = '<p class="text-gray-500 text-center">טוען מעקבים...</p>';
+            noTrackersMsg.style.display = 'none';
+
+            try {
+                const trackersCollectionPath = `/artifacts/${appId}/public/data/trackers`;
+                const q = query(collection(db, trackersCollectionPath), where("ownerId", "==", userId));
+                const querySnapshot = await getDocs(q);
+
+                const settingsDocPath = `/artifacts/${appId}/public/data/users/${userId}`;
+                const settingsDoc = await getDoc(doc(db, settingsDocPath));
+                const currentDefault = settingsDoc.exists() ? settingsDoc.data().defaultTrackerId : null;
+
+                if (querySnapshot.empty) {
+                     listElement.innerHTML = '';
+                     noTrackersMsg.style.display = 'block';
+                     return;
+                }
+                
+                let trackersHtml = '<div class="flex items-center"><input type="radio" id="default-none" name="default-tracker" value="none" class="ml-2 focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300"><label for="default-none" class="w-full py-2 cursor-pointer">ללא (כניסה לדף הבית)</label></div>';
+                
+                querySnapshot.forEach((doc) => {
+                    const tracker = doc.data();
+                    const isChecked = doc.id === currentDefault ? 'checked' : '';
+                    trackersHtml += `
+                        <div class="flex items-center p-2 rounded-md hover:bg-gray-100">
+                           <input type="radio" id="${doc.id}" name="default-tracker" value="${doc.id}" ${isChecked} class="ml-2 focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300">
+                           <label for="${doc.id}" class="w-full py-2 cursor-pointer">${tracker.name}</label>
+                        </div>
+                    `;
+                });
+                
+                listElement.innerHTML = trackersHtml;
+                
+                // check none option if no default is set
+                if (!currentDefault) {
+                  document.getElementById('default-none').checked = true;
+                }
+
+            } catch (error) {
+                console.error("Error loading trackers for settings:", error);
+                listElement.innerHTML = '<p class="text-red-500 text-center">שגיאה בטעינת המעקבים.</p>';
+            }
+        }
+
+        async function saveSettings() {
+             if (!auth.currentUser) return;
+
+            const selectedTracker = document.querySelector('input[name="default-tracker"]:checked');
+            if (!selectedTracker) {
+                alert("יש לבחור אפשרות.");
+                return;
+            }
+
+            const defaultTrackerId = selectedTracker.value === 'none' ? null : selectedTracker.value;
+            
+            try {
+                const settingsDocPath = `/artifacts/${appId}/public/data/users/${auth.currentUser.uid}`;
+                await setDoc(doc(db, settingsDocPath), { defaultTrackerId: defaultTrackerId }, { merge: true });
+                alert("ההגדרות נשמרו בהצלחה!");
+                closeModal(settingsModal);
+            } catch (error) {
+                 console.error("Error saving settings:", error);
+                 alert("אירעה שגיאה בשמירת ההגדרות.");
+            }
+        }
+        
+        async function checkDefaultTracker(userId) {
+            try {
+                const settingsDocPath = `/artifacts/${appId}/public/data/users/${userId}`;
+                const docSnap = await getDoc(doc(db, settingsDocPath));
+                if (docSnap.exists()) {
+                    const settings = docSnap.data();
+                    if (settings.defaultTrackerId) {
+                         console.log(`Default tracker found: ${settings.defaultTrackerId}. Redirecting...`);
+                         window.location.href = `mahakv.html?id=${settings.defaultTrackerId}`;
+                    }
+                }
+            } catch (error) {
+                console.error("Error checking for default tracker:", error);
+            }
+        }
+
+    </script>
+
+</body>
+</html>
