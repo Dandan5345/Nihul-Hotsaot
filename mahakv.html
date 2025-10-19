@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ניהול הוצאות</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Google Fonts for Hebrew typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- jsPDF and html2canvas for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f1f5f9; /* slate-100 */
+            --card-bg-color: #ffffff; /* white */
+            --text-color: #334155; /* slate-700 */
+            --header-bg-color: #ffffff;
+            --accent-color: #3b82f6; /* blue-500 */
+        }
+
+        body { 
+            font-family: 'Assistant', sans-serif; 
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.5s ease;
+        }
+        .modal-transition { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
+        .modal-hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
+        .modal-visible { opacity: 1; transform: scale(1); }
+        #loading-overlay { transition: opacity 0.5s ease-in-out; }
+        
+        .tab-btn.active {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background-color: color-mix(in srgb, var(--accent-color) 15%, transparent);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .filter-btn.active {
+            background-color: var(--accent-color);
+            color: white;
+        }
+        
+        .owner-filter-btn.active {
+            background-color: var(--accent-color);
+            color: white;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        }
+        .owner-filter-btn[data-owner="compare"].active {
+            background-color: #16a34a; /* green-600 */
+        }
+        
+        .expense-card-clickable {
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .expense-card-clickable:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .loader {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #d1d5db; /* gray-300 */
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Styles for collapsible categories */
+        .category-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out, padding 0.5s ease-in-out;
+            padding: 0 1rem; /* p-4 horizontal */
+        }
+        .category-content.expanded {
+             max-height: 1000px; /* Arbitrary large value */
+             padding: 1rem; /* p-4 */
+        }
+
+        /* Styles for Table Layout */
+        .expense-table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .expense-table {
+            width: 100%;
+            min-width: 700px; /* Ensure horizontal scroll on small screens */
+            border-collapse: collapse;
+        }
+        .expense-table th, .expense-table td {
+            padding: 12px 16px;
+            text-align: right;
+            border-bottom: 1px solid #e5e7eb; /* gray-200 */
+            white-space: nowrap;
+        }
+        .expense-table th {
+            background-color: #f9fafb; /* gray-50 */
+            font-weight: 600;
+        }
+        .expense-table tbody tr:hover {
+            background-color: #f9fafb; /* gray-50 */
+        }
+        
+        /* Layout Switching Logic */
+        .layout-cards .expense-table-view { display: none; }
+        .layout-table .expense-cards-view { display: none; }
+        
+        /* FIX for sticky header scroll jump */
+        #main-content-wrapper {
+            padding-top: 64px; /* Height of the header (h-16) */
+        }
+
+    </style>
+</head>
+<body class="bg-slate-100">
+
+    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-[200] flex flex-col items-center justify-center gap-4">
+        <i class="fas fa-wallet text-5xl text-blue-600 animate-pulse"></i>
+        <p id="loading-text" class="text-xl font-bold text-slate-700">טוען הוצאות...</p>
+    </div>
+
+    <!-- Onboarding screen for new users -->
+    <div id="onboarding-screen" class="hidden">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center">
+            <i class="fas fa-magic-wand-sparkles text-6xl text-blue-500 mb-6"></i>
+            <h1 class="text-3xl font-bold text-slate-800 mb-4">ברוכים הבאים למנהל ההוצאות!</h1>
+            <p class="text-slate-600 max-w-2xl mx-auto mb-8">זהו המקום המרכזי שלכם למעקב אחר כל ההוצאות. בואו נתחיל!</p>
+            <div class="text-right max-w-3xl mx-auto space-y-8">
+                <div class="bg-white p-6 rounded-2xl shadow-lg">
+                    <h2 class="text-xl font-bold text-slate-800 mb-3">איך מתחילים?</h2>
+                    <p class="text-slate-600 mb-4">לחצו על הכפתור כדי להוסיף את ההוצאה הראשונה שלכם.</p>
+                     <div class="flex flex-col sm:flex-row gap-4 mt-4">
+                         <button id="add-first-expense-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-transform transform hover:scale-105">
+                             <i class="fas fa-plus-circle mr-2"></i>הוסף הוצאה ראשונה
+                         </button>
+                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for displaying expense details -->
+    <div id="expense-details-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[102] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg text-slate-800" style="background-color: var(--card-bg-color); color: var(--text-color);">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-2xl font-bold">פרטי הוצאה</h3>
+                <button data-close-modal="expense-details-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <div id="expense-details-content" class="space-y-3">
+                <!-- Content is generated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-xl text-slate-800 flex flex-col max-h-[90vh]">
+            <div class="flex-shrink-0">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-2xl font-bold">הגדרות</h3>
+                    <button data-close-modal="settings-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+                </div>
+            </div>
+
+            <div class="flex-grow overflow-y-auto pr-2 -mr-2">
+                 <div class="space-y-6">
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">סגנון תצוגה</h4>
+                        <div class="flex gap-4 rounded-lg bg-slate-100 p-1">
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="layout-style" value="cards" class="sr-only peer" checked>
+                                <div class="p-2 rounded-md peer-checked:bg-blue-500 peer-checked:text-white">כרטיסיות</div>
+                            </label>
+                            <label class="flex-1 text-center cursor-pointer">
+                                <input type="radio" name="layout-style" value="table" class="sr-only peer">
+                                <div class="p-2 rounded-md peer-checked:bg-blue-500 peer-checked:text-white">טבלה</div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">ערכות נושא דינמיות</h4>
+                        <div id="dynamic-themes-container" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <!-- Dynamic themes populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">ערכות נושא מוכנות</h4>
+                        <div id="preset-themes-container" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <!-- Preset themes populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-lg font-semibold mb-2">צבעים מותאמים</h4>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div class="flex flex-col items-center">
+                                <label for="bg-color-picker" class="text-sm mb-1">צבע רקע</label>
+                                <input type="color" id="bg-color-picker" class="w-16 h-10 rounded-md border-none cursor-pointer">
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <label for="card-bg-color-picker" class="text-sm mb-1">רקע כרטיסיה</label>
+                                <input type="color" id="card-bg-color-picker" class="w-16 h-10 rounded-md border-none cursor-pointer">
+                            </div>
+                             <div class="flex flex-col items-center">
+                                <label for="text-color-picker" class="text-sm mb-1">צבע טקסט</label>
+                                <input type="color" id="text-color-picker" class="w-16 h-10 rounded-md border-none cursor-pointer">
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <label for="accent-color-picker" class="text-sm mb-1">צבע הדגשה</label>
+                                <input type="color" id="accent-color-picker" class="w-16 h-10 rounded-md border-none cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Modal for adding/editing an expense -->
+    <div id="expense-modal" class="modal-transition modal-hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 id="modal-title" class="text-2xl font-bold text-slate-800">הוספת הוצאה חדשה</h3>
+                <button data-close-modal="expense-modal" class="text-slate-400 hover:text-red-500"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <form id="expense-form" class="space-y-4">
+                <input type="hidden" id="expense-id">
+                <div>
+                    <label for="expense-owner-name" class="block text-sm font-medium text-slate-700 mb-1">שם המוסיף</label>
+                    <input type="text" id="expense-owner-name" class="w-full p-2 border rounded-md bg-slate-50" required>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="expense-amount" class="block text-sm font-medium text-slate-700 mb-1">סכום</label>
+                        <input type="number" id="expense-amount" step="0.01" class="w-full p-2 border rounded-md" placeholder="100" required>
+                    </div>
+                    <div>
+                        <label for="expense-currency" class="block text-sm font-medium text-slate-700 mb-1">מטבע</label>
+                        <select id="expense-currency" class="w-full p-2 border rounded-md bg-white"></select>
+                    </div>
+                </div>
+                <div>
+                    <label for="expense-category" class="block text-sm font-medium text-slate-700 mb-1">קטגוריה</label>
+                    <div class="flex items-center gap-2">
+                        <select id="expense-category" class="w-full p-2 border rounded-md bg-white"></select>
+                        <button type="button" id="delete-category-btn" class="text-slate-400 hover:text-red-500 p-2 hidden" title="מחק קטגוריה זו"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                <div id="new-category-wrapper" class="hidden">
+                    <label for="new-category-name" class="block text-sm font-medium text-slate-700 mb-1">שם הקטגוריה החדשה</label>
+                    <input type="text" id="new-category-name" class="w-full p-2 border rounded-md" placeholder="לדוגמה: בילויים">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="expense-date" class="block text-sm font-medium text-slate-700 mb-1">תאריך</label>
+                        <input type="date" id="expense-date" class="w-full p-2 border rounded-md" required>
+                    </div>
+                    <div>
+                        <label for="expense-notes" class="block text-sm font-medium text-slate-700 mb-1">פירוט (אופציונלי)</label>
+                        <input type="text" id="expense-notes" class="w-full p-2 border rounded-md" placeholder="פרטים נוספים...">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 pt-4">
+                    <button type="button" data-close-modal="expense-modal" class="bg-gray-200 hover:bg-gray-300 text-black font-bold py-2 px-6 rounded-lg">ביטול</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">שמור</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main content area -->
+    <div id="main-content" class="hidden">
+        <header class="shadow-sm sticky top-0 z-30 h-16" style="background-color: var(--header-bg-color);">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <a id="back-to-dashboard" href="index.html" class="font-bold hover:text-blue-600 flex items-center gap-2" style="color: var(--text-color);">
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                    <h1 id="trip-title" class="text-xl font-bold truncate" style="color: var(--text-color);">ניהול הוצאות</h1>
+                    <div class="flex items-center gap-2">
+                        <button id="export-pdf-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="ייצא דוח ל-PDF">
+                            <i class="fas fa-file-export"></i>
+                        </button>
+                        <button id="settings-btn" class="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-slate-200 rounded-full h-8 w-8 flex items-center justify-center transition" title="הגדרות">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                        <button id="add-expense-btn-header" class="bg-blue-600 hover:bg-blue-700 text-white rounded-full h-8 w-8 flex items-center justify-center shadow-md" title="הוסף הוצאה">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div id="main-content-wrapper">
+            <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+                <div class="mb-6 bg-slate-200 p-1 rounded-full grid grid-cols-2 gap-1">
+                    <button class="tab-btn active font-bold py-2 px-4 rounded-full transition" data-tab="today">היום</button>
+                    <button class="tab-btn font-bold py-2 px-4 rounded-full transition" data-tab="all">כל ההוצאות</button>
+                </div>
+
+                <!-- "Today" Tab Content -->
+                <div id="tab-today" class="tab-content active space-y-6">
+                    <section id="owner-filters-today" class="mb-6 hidden"></section>
+                    
+                    <div id="normal-view-today">
+                        <div class="space-y-6">
+                            <section id="summary-section-today" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
+                            <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                                <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">התפלגות יומית (בשקלים)</h3>
+                                <div class="h-64 md:h-80 flex justify-center"><canvas id="expenses-chart-today"></canvas></div>
+                            </section>
+                            <section>
+                                <div id="expenses-list-today"></div>
+                                <div id="no-expenses-message-today" class="text-center p-10 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
+                                    <i class="fas fa-receipt text-4xl text-slate-300 mb-4"></i>
+                                    <p class="text-slate-500">אין הוצאות להיום.</p>
+                                </div>
+                            </section>
+                            <section id="summary-table-section-today" class="p-4 md:p-6 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
+                                <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">סיכום הוצאות יומי</h3>
+                                <div id="summary-table-today"></div>
+                            </section>
+                        </div>
+                    </div>
+
+                    <div id="comparison-view-today" class="hidden space-y-6">
+                        <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                            <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                                <h3 class="text-xl font-bold" style="color: var(--text-color);">השוואת הוצאות</h3>
+                                <select id="comparison-category-filter-today" class="w-full sm:w-auto p-2 border rounded-md bg-slate-50"></select>
+                            </div>
+                            <div class="h-64 md:h-80 flex justify-center"><canvas id="owner-comparison-chart-today"></canvas></div>
+                            <div id="comparison-total-today" class="text-center mt-4 text-lg font-bold"></div>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- "All Expenses" Tab Content -->
+                <div id="tab-all" class="tab-content space-y-6">
+                    <section id="owner-filters-all" class="mb-6 hidden"></section>
+                    
+                    <div id="normal-view-all">
+                        <div class="space-y-6">
+                            <section class="p-3 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                                <div id="filters" class="flex items-center justify-center gap-2 bg-blue-700 p-1 rounded-full flex-wrap">
+                                    <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="week">שבוע</button>
+                                    <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="month">חודש</button>
+                                    <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="2months">חודשיים</button>
+                                    <button class="filter-btn text-white text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="6months">חצי שנה</button>
+                                    <button class="filter-btn active text-sm font-semibold px-3 py-1 rounded-full transition" data-filter="all">הכל</button>
+                                </div>
+                            </section>
+                            <section id="summary-section-all" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></section>
+                            <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                                <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">התפלגות לפי קטגוריה (בשקלים)</h3>
+                                <div class="h-64 md:h-80 flex justify-center"><canvas id="expenses-chart-all"></canvas></div>
+                            </section>
+                            <section>
+                                <div id="expenses-list-all"></div>
+                                <div id="no-expenses-message-all" class="text-center p-10 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
+                                    <i class="fas fa-search-dollar text-4xl text-slate-300 mb-4"></i>
+                                    <p class="text-slate-500">לא נמצאו הוצאות התואמות לסינון.</p>
+                                </div>
+                            </section>
+                            <section id="summary-table-section-all" class="p-4 md:p-6 rounded-2xl shadow-lg hidden" style="background-color: var(--card-bg-color);">
+                                <h3 class="text-xl font-bold mb-4" style="color: var(--text-color);">סיכום הוצאות כללי</h3>
+                                <div id="summary-table-all"></div>
+                            </section>
+                        </div>
+                    </div>
+                    
+                    <div id="comparison-view-all" class="hidden space-y-6">
+                        <section class="p-4 md:p-6 rounded-2xl shadow-lg" style="background-color: var(--card-bg-color);">
+                            <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                                <h3 class="text-xl font-bold" style="color: var(--text-color);">השוואת הוצאות</h3>
+                                <select id="comparison-category-filter-all" class="w-full sm:w-auto p-2 border rounded-md bg-slate-50"></select>
+                            </div>
+                            <div class="h-64 md:h-80 flex justify-center"><canvas id="owner-comparison-chart-all"></canvas></div>
+                            <div id="comparison-total-all" class="text-center mt-4 text-lg font-bold"></div>
+                        </section>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase SDK imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import {
+            getFirestore, doc, getDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc,
+            enableIndexedDbPersistence
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // CORRECT Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCkhBZZldZTG5NDPI-2XJmkBZ4_uH8WQwo",
+            authDomain: "mahakv-7b8ac.firebaseapp.com",
+            projectId: "mahakv-7b8ac",
+            storageBucket: "mahakv-7b8ac.firebasestorage.app",
+            messagingSenderId: "381504704523",
+            appId: "1:381504704523:web:83ccd44d67f149f485770e",
+            measurementId: "G-2F7JMV53H3"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- Offline persistence (IndexedDB) ---
+        enableIndexedDbPersistence(db).catch((err) => {
+            if (err.code === 'failed-precondition') {
+                console.warn("Persistence נכשל: כנראה יש כמה טאבים פתוחים.");
+            } else if (err.code === 'unimplemented') {
+                console.warn("הדפדפן לא תומך ב-Persistence.");
+            }
+        });
+
+        // --- Global State ---
+        let currentUserProfile = null;
+        let trackerId = null; // Changed from tripId
+        let trackerDetails = {}; // Changed from tripDetails
+        let allExpenses = [];
+        let trackerCategories = []; // Changed from tripCategories
+        let expensesUnsubscribe = null;
+        let categoriesUnsubscribe = null;
+        
+        let expensesChartAll = null;
+        let expensesChartToday = null;
+        let ownerComparisonChartAll = null;
+        let ownerComparisonChartToday = null;
+        
+        let activeTab = 'today';
+        let activeFilter = 'all';
+        let activeOwner = 'all'; 
+        let comparisonViewActive = false;
+        let activeComparisonCategory = 'all';
+        let currentTheme = {};
+        let themeUpdateInterval = null;
+
+        let rateCache = {};
+        let renderTimeout = null; // For debouncing render calls
+
+        const defaultCategories = ['🍔 אוכל ושתיה', '🚗 תחבורה', '🏨 לינה', '🎢 אטרקציות', '🛍️ קניות', '📎 אחר'];
+        const currencies = {
+            "ILS": "Israeli New Sheqel (₪)", "USD": "United States Dollar ($)", "EUR": "Euro (€)", "GBP": "British Pound (£)", "AUD": "Australian Dollar (A$)", "BGN": "Bulgarian Lev (лв)", "BRL": "Brazilian Real (R$)", "CAD": "Canadian Dollar (C$)", "CHF": "Swiss Franc (CHF)", "CNY": "Chinese Renminbi Yuan (¥)", "CZK": "Czech Koruna (Kč)", "DKK": "Danish Krone (kr)", "HKD": "Hong Kong Dollar (HK$)", "HUF": "Hungarian Forint (Ft)", "IDR": "Indonesian Rupiah (Rp)", "INR": "Indian Rupee (₹)", "ISK": "Icelandic Króna (kr)", "JPY": "Japanese Yen (¥)", "KRW": "South Korean Won (₩)", "MXN": "Mexican Peso (MX$)", "MYR": "Malaysian Ringgit (RM)", "NOK": "Norwegian Krone (kr)", "NZD": "New Zealand Dollar (NZ$)", "PHP": "Philippine Peso (₱)", "PLN": "Polish Złoty (zł)", "RON": "Romanian Leu (lei)", "SEK": "Swedish Krona (kr)", "SGD": "Singapore Dollar (S$)", "THB": "Thai Baht (฿)", "TRY": "Turkish Lira (₺)", "ZAR": "South African Rand (R)"
+        };
+        const prioritizedCurrencies = ['ILS', 'USD', 'EUR', 'GBP'];
+
+        // --- Initialization ---
+        function initPage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            trackerId = urlParams.get('id'); // Changed from tripId
+            if (!trackerId) {
+                console.error("Error: Tracker ID not found.");
+                alert('לא נבחר מעקב. חוזר לדף הבית.');
+                window.location.href = 'index.html'; 
+                return;
+            }
+            document.getElementById('back-to-dashboard').href = `index.html`; // Back to main dashboard
+            populateCurrencyDropdown();
+            populateThemes();
+            loadTheme();
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    await fetchUserProfile(user.uid);
+                    fetchTrackerDetails(); // Changed from fetchTripDetails
+                    listenForCategories();
+                    listenForExpenses();
+                } else {
+                    console.log("User not logged in, redirecting...");
+                    window.location.href = 'index.html'; 
+                }
+            });
+            setupEventListeners();
+        }
+
+        // --- Data Fetching & Realtime Listeners ---
+        async function fetchUserProfile(uid) {
+            const userDocRef = doc(db, "users", uid);
+            const docSnap = await getDoc(userDocRef);
+            currentUserProfile = docSnap.exists() ? { uid, ...docSnap.data() } : { uid, displayName: "משתמש" };
+        }
+
+        async function fetchTrackerDetails() {
+            const trackerDocRef = doc(db, "trackers", trackerId); // Changed from "trips"
+            const docSnap = await getDoc(trackerDocRef);
+            if (docSnap.exists()) {
+                trackerDetails = docSnap.data();
+                document.getElementById('trip-title').textContent = trackerDetails.name || 'ניהול הוצאות';
+            }
+        }
+
+        function listenForCategories() {
+            if (categoriesUnsubscribe) categoriesUnsubscribe();
+            const categoriesDocRef = doc(db, "trackers", trackerId, "settings", "categories"); // Changed from "trips"
+            categoriesUnsubscribe = onSnapshot(categoriesDocRef, (docSnap) => {
+                trackerCategories = docSnap.exists() ? (docSnap.data().list || []) : [...defaultCategories];
+                if (!docSnap.exists()) {
+                    setDoc(categoriesDocRef, { list: defaultCategories });
+                }
+                populateCategoryDropdown();
+            });
+        }
+
+        function listenForExpenses() {
+            if (expensesUnsubscribe) expensesUnsubscribe();
+            const expensesColRef = collection(db, "trackers", trackerId, "expenses"); // Changed from "trips"
+            expensesUnsubscribe = onSnapshot(expensesColRef, (snapshot) => {
+                allExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                if (allExpenses.length === 0 && !snapshot.metadata.fromCache) {
+                    document.getElementById('main-content').classList.add('hidden');
+                    document.getElementById('onboarding-screen').classList.remove('hidden');
+                    hideLoadingOverlay();
+                } else {
+                    document.getElementById('main-content').classList.remove('hidden');
+                    document.getElementById('onboarding-screen').classList.add('hidden');
+                    allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    scheduleRender();
+                }
+            });
+        }
+
+        function hideLoadingOverlay() {
+            const loadingOverlay = document.getElementById('loading-overlay');
+            if (!loadingOverlay.classList.contains('opacity-0')) {
+                loadingOverlay.classList.add('opacity-0');
+                setTimeout(() => loadingOverlay.style.display = 'none', 500);
+            }
+        }
+
+        // --- Central Render Function ---
+        function scheduleRender() {
+            if (renderTimeout) clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(async () => {
+                await prefetchAllCurrencyRates(allExpenses);
+                await render();
+                hideLoadingOverlay();
+            }, 200);
+        }
+
+        async function render() {
+            if (allExpenses.length === 0) return;
+            
+            renderOwnerFilters();
+            let filteredExpenses = getFilteredExpenses();
+
+            const normalView = document.getElementById(`normal-view-${activeTab}`);
+            const comparisonView = document.getElementById(`comparison-view-${activeTab}`);
+
+            if (comparisonViewActive) {
+                normalView.style.display = 'none';
+                comparisonView.style.display = 'block';
+                await renderComparisonView(filteredExpenses, activeTab);
+            } else {
+                normalView.style.display = 'block';
+                comparisonView.style.display = 'none';
+                await renderNormalView(filteredExpenses, activeTab);
+            }
+        }
+        
+        async function renderNormalView(expenses, tabId) {
+            renderExpenseList(expenses, tabId);
+            renderSummary(expenses, tabId);
+            await renderSummaryTable(expenses, tabId);
+
+            if (tabId === 'today') {
+                expensesChartToday = await updateChartGeneric(expenses, 'expenses-chart-today', expensesChartToday);
+            } else {
+                expensesChartAll = await updateChartGeneric(expenses, 'expenses-chart-all', expensesChartAll);
+            }
+        }
+
+        async function renderComparisonView(expenses, tabId) {
+             populateComparisonCategoryFilter(expenses, tabId);
+             let categoryFilteredExpenses = expenses;
+             if(activeComparisonCategory !== 'all') {
+                 categoryFilteredExpenses = expenses.filter(exp => exp.category === activeComparisonCategory);
+             }
+
+             if (tabId === 'today') {
+                 ownerComparisonChartToday = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-today', ownerComparisonChartToday);
+             } else {
+                 ownerComparisonChartAll = await updateOwnerComparisonChart(categoryFilteredExpenses, 'owner-comparison-chart-all', ownerComparisonChartAll);
+             }
+        }
+
+        // --- Filtering Logic ---
+        function getFilteredExpenses() {
+            const now = new Date();
+            const todayString = now.toISOString().split('T')[0];
+            
+            let dateFilteredExpenses;
+            if (activeTab === 'today') {
+                dateFilteredExpenses = allExpenses.filter(exp => exp.date === todayString);
+            } else {
+                let startDate = new Date(0);
+                switch (activeFilter) {
+                    case 'week': startDate = new Date(new Date().setDate(now.getDate() - 7)); break;
+                    case 'month': startDate = new Date(new Date().setMonth(now.getMonth() - 1)); break;
+                    case '2months': startDate = new Date(new Date().setMonth(now.getMonth() - 2)); break;
+                    case '6months': startDate = new Date(new Date().setMonth(now.getMonth() - 6)); break;
+                    default: break; // 'all' case
+                }
+                if (activeFilter !== 'all') {
+                    dateFilteredExpenses = allExpenses.filter(exp => new Date(exp.date) >= startDate);
+                } else {
+                    dateFilteredExpenses = allExpenses;
+                }
+            }
+
+            if (comparisonViewActive || activeOwner === 'all') {
+                return dateFilteredExpenses;
+            } else {
+                return dateFilteredExpenses.filter(exp => exp.ownerName === activeOwner);
+            }
+        }
+
+        // --- UI Rendering ---
+        function renderExpenseList(expenses, tabId) {
+            const listContainer = document.getElementById(`expenses-list-${tabId}`);
+            const noItemsMsg = document.getElementById(`no-expenses-message-${tabId}`);
+            listContainer.innerHTML = '';
+
+            if (expenses.length === 0) {
+                noItemsMsg.classList.remove('hidden');
+                listContainer.parentElement.classList.add('hidden');
+                return;
+            }
+
+            noItemsMsg.classList.add('hidden');
+            listContainer.parentElement.classList.remove('hidden');
+
+            listContainer.innerHTML = `
+                <div class="expense-cards-view"></div>
+                <div class="expense-table-view"></div>
+            `;
+            
+            const cardsContainer = listContainer.querySelector('.expense-cards-view');
+            const tableContainer = listContainer.querySelector('.expense-table-view');
+
+            renderExpenseTable(expenses, tableContainer, tabId);
+            if (tabId === 'all') {
+                renderCollapsibleCategories(expenses, cardsContainer);
+            } else {
+                renderSimpleExpenseList(expenses, cardsContainer);
+            }
+        }
+
+        function renderSimpleExpenseList(expenses, container) {
+            expenses.forEach((exp, index) => {
+                const card = createExpenseCard(exp, `conv-today-${index}`);
+                container.appendChild(card);
+                if (exp.currency !== 'ILS') {
+                    displayConvertedAmount(`conv-today-${index}`, exp.amount, exp.currency);
+                } else {
+                    const el = document.getElementById(`conv-today-${index}`);
+                    if (el) el.style.display = 'none';
+                }
+            });
+        }
+
+        function renderCollapsibleCategories(expenses, container) {
+            const groupedExpenses = expenses.reduce((acc, exp) => {
+                (acc[exp.category] = acc[exp.category] || []).push(exp);
+                return acc;
+            }, {});
+
+            Object.entries(groupedExpenses).forEach(([category, items]) => {
+                const categoryWrapper = document.createElement('div');
+                categoryWrapper.className = 'rounded-2xl shadow-lg overflow-hidden';
+                categoryWrapper.style.backgroundColor = 'var(--card-bg-color)';
+
+                const header = document.createElement('button');
+                header.className = 'category-header w-full text-right p-4 flex justify-between items-center hover:bg-slate-50/50 transition';
+                header.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-lg" style="color: var(--text-color);">${category}</span>
+                        <span class="text-sm text-slate-500">(${items.length} הוצאות)</span>
+                    </div>
+                    <i class="fas fa-chevron-down text-slate-400 transition-transform"></i>
+                `;
+
+                const content = document.createElement('div');
+                content.className = 'category-content border-t border-slate-100';
+                
+                const innerList = document.createElement('div');
+                innerList.className = 'space-y-3';
+                content.appendChild(innerList);
+
+                items.forEach((exp, index) => {
+                    const uniqueId = `conv-all-${category.replace(/\s/g, '')}-${index}`;
+                    const card = createExpenseCard(exp, uniqueId);
+                    card.classList.remove('shadow-md');
+                    card.classList.add('shadow-none', 'border-b', 'last:border-b-0', 'rounded-none', 'p-3');
+                    card.style.backgroundColor = 'transparent';
+                    innerList.appendChild(card);
+                    if (exp.currency !== 'ILS') {
+                        displayConvertedAmount(uniqueId, exp.amount, exp.currency);
+                    } else {
+                         const el = document.getElementById(uniqueId);
+                         if (el) el.style.display = 'none';
+                    }
+                });
+
+                categoryWrapper.appendChild(header);
+                categoryWrapper.appendChild(content);
+                container.appendChild(categoryWrapper);
+            });
+        }
+        
+        function renderExpenseTable(expenses, container, tabId) {
+            container.innerHTML = '';
+            const wrapper = document.createElement('div');
+            wrapper.className = 'expense-table-wrapper rounded-2xl shadow-lg';
+            wrapper.style.backgroundColor = 'var(--card-bg-color)';
+
+            const table = document.createElement('table');
+            table.className = 'expense-table';
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>תאריך</th>
+                        <th>שם</th>
+                        <th>קטגוריה</th>
+                        <th>פירוט</th>
+                        <th>סכום</th>
+                        <th>סכום (₪)</th>
+                        <th>פעולות</th>
+                    </tr>
+                </thead>
+            `;
+            const tbody = document.createElement('tbody');
+            
+            expenses.forEach((exp, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'expense-card-clickable';
+                tr.dataset.id = exp.id;
+                const isOwner = currentUserProfile && exp.ownerId === currentUserProfile.uid;
+                const uniqueId = `conv-table-${tabId}-${index}`;
+
+                tr.innerHTML = `
+                    <td>${new Date(exp.date).toLocaleDateString('he-IL')}</td>
+                    <td>${exp.ownerName || 'לא ידוע'}</td>
+                    <td>${exp.category}</td>
+                    <td>${exp.notes || '---'}</td>
+                    <td class="font-mono">${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2 })} ${exp.currency}</td>
+                    <td id="${uniqueId}" class="font-mono"></td>
+                    <td>
+                        ${isOwner ? `<div class="flex justify-end gap-3">
+                            <button class="edit-btn text-slate-400 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
+                            <button class="delete-btn text-slate-400 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
+                        </div>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                if (exp.currency !== 'ILS') {
+                    displayConvertedAmount(uniqueId, exp.amount, exp.currency, true);
+                } else {
+                    const el = document.getElementById(uniqueId);
+                    if (el) el.textContent = exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2 });
+                }
+            });
+
+            table.appendChild(tbody);
+            wrapper.appendChild(table);
+            container.appendChild(wrapper);
+        }
+
+        function createExpenseCard(exp, uniqueId) {
+            const card = document.createElement('div');
+            card.className = 'p-4 rounded-2xl shadow-md flex items-center gap-4 expense-card-clickable';
+            card.style.backgroundColor = 'var(--card-bg-color)';
+            card.dataset.id = exp.id;
+            const isOwner = currentUserProfile && exp.ownerId === currentUserProfile.uid;
+            
+            card.innerHTML = `
+                <div class="flex-shrink-0 h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl">${exp.category.match(/(\p{Emoji})/u)?.[0] || '📎'}</div>
+                <div class="flex-grow min-w-0">
+                    <p class="font-bold truncate" style="color: var(--text-color);">${exp.notes || 'הוצאה'}</p>
+                    <p class="text-sm text-slate-500"><span class="font-semibold">${exp.ownerName || 'לא ידוע'}</span> • ${new Date(exp.date).toLocaleDateString('he-IL')}</p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="font-bold text-lg text-red-600 whitespace-nowrap">
+                        ${exp.amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${exp.currency}
+                    </p>
+                    <p id="${uniqueId}" class="text-slate-500 font-normal text-sm text-right"></p>
+                    ${isOwner ? `<div class="flex justify-end gap-2 mt-1">
+                        <button class="edit-btn text-slate-400 hover:text-blue-600" data-id="${exp.id}"><i class="fas fa-pencil-alt"></i></button>
+                        <button class="delete-btn text-slate-400 hover:text-red-600" data-id="${exp.id}"><i class="fas fa-trash"></i></button>
+                    </div>` : ''}
+                </div>
+            `;
+            return card;
+        }
+
+        function renderSummary(expenses, containerId) {
+            const summaryContainer = document.getElementById(`summary-section-${containerId}`);
+            const summary = expenses.reduce((acc, exp) => {
+                acc[exp.currency] = (acc[exp.currency] || 0) + Number(exp.amount);
+                return acc;
+            }, {});
+            summaryContainer.innerHTML = '';
+            if (Object.keys(summary).length === 0) {
+                summaryContainer.innerHTML = `<div class="p-6 rounded-2xl shadow-lg text-center col-span-full" style="background-color: var(--card-bg-color);"><p class="text-slate-500">אין הוצאות להצגה</p></div>`;
+                return;
+            }
+            for (const currency in summary) {
+                const card = document.createElement('div');
+                card.className = 'p-4 rounded-2xl shadow-lg text-center';
+                card.style.backgroundColor = 'var(--card-bg-color)';
+                card.innerHTML = `
+                    <h3 class="text-slate-500 font-semibold text-sm">סה"כ (${currency})</h3>
+                    <p class="text-2xl font-bold mt-1" style="color: var(--accent-color);">${summary[currency].toLocaleString('he-IL', { minimumFractionDigits: 2 })}</p>
+                `;
+                summaryContainer.appendChild(card);
+            }
+        }
+
+        async function updateChartGeneric(expenses, canvasId, chartInstance) {
+            const chartCanvas = document.getElementById(canvasId);
+            if (!chartCanvas) return chartInstance;
+            const parentSection = chartCanvas.closest('section');
+
+            if (expenses.length === 0) {
+                if (chartInstance) chartInstance.destroy();
+                parentSection.style.display = 'none';
+                return null;
+            }
+            parentSection.style.display = 'block';
+
+            const categoryData = {};
+            for (const exp of expenses) {
+                const amountInILS = await convertToILS(exp.amount, exp.currency);
+                categoryData[exp.category] = (categoryData[exp.category] || 0) + amountInILS;
+            }
+
+            const labels = Object.keys(categoryData);
+            const data = Object.values(categoryData);
+            const chartColors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308', '#64748b', '#ec4899', '#10b981', '#f59e0b'];
+
+            const chartConfig = {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data, backgroundColor: chartColors, borderColor: currentTheme.cardBgColor || '#fff', borderWidth: 4 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '60%',
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" }, color: currentTheme.textColor || '#334155', boxWidth: 20, padding: 20 } },
+                        tooltip: { callbacks: { label: (context) => ` ${context.label}: ${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(context.parsed)}` } }
+                    }
+                }
+            };
+            
+            if (chartInstance) {
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = data;
+                chartInstance.options.plugins.legend.labels.color = currentTheme.textColor;
+                chartInstance.data.datasets[0].borderColor = currentTheme.cardBgColor;
+                chartInstance.update();
+                return chartInstance;
+            } else {
+                return new Chart(chartCanvas, chartConfig);
+            }
+        }
+
+        function renderOwnerFilters() {
+            const uniqueOwners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
+            const containers = [document.getElementById('owner-filters-today'), document.getElementById('owner-filters-all')];
+            
+            containers.forEach(container => {
+                if (uniqueOwners.length <= 1) {
+                    container.innerHTML = '';
+                    container.classList.add('hidden');
+                    return;
+                }
+                container.classList.remove('hidden');
+                let buttonsHTML = `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === 'all' && !comparisonViewActive ? 'active' : ''}" style="background-color: ${activeOwner === 'all' && !comparisonViewActive ? '' : 'var(--card-bg-color)'}" data-owner="all">הכל</button>`;
+                uniqueOwners.forEach(owner => {
+                    buttonsHTML += `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${activeOwner === owner && !comparisonViewActive ? 'active' : ''}" style="background-color: ${activeOwner === owner && !comparisonViewActive ? '' : 'var(--card-bg-color)'}" data-owner="${owner}">${owner}</button>`;
+                });
+                buttonsHTML += `<button class="owner-filter-btn font-semibold px-4 py-2 rounded-full transition ${comparisonViewActive ? 'active' : ''}" style="background-color: ${comparisonViewActive ? '' : 'var(--card-bg-color)'}" data-owner="compare"><i class="fas fa-chart-pie mr-2"></i>השווה</button>`;
+                container.innerHTML = `<div class="flex items-center justify-center gap-2 flex-wrap p-1 bg-slate-200 rounded-full">${buttonsHTML}</div>`;
+            });
+        }
+
+        async function renderSummaryTable(expenses, containerId) {
+            const tableContainer = document.getElementById(`summary-table-${containerId}`);
+            const sectionContainer = document.getElementById(`summary-table-section-${containerId}`);
+
+            if (expenses.length === 0) {
+                sectionContainer.classList.add('hidden');
+                return;
+            }
+            sectionContainer.classList.remove('hidden');
+
+            const categoryTotals = {};
+            for (const exp of expenses) {
+                const amountInILS = await convertToILS(exp.amount, exp.currency);
+                categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amountInILS;
+            }
+
+            const sortedCategories = Object.entries(categoryTotals).sort(([, a], [, b]) => b - a);
+            
+            let tableHTML = `<div class="flow-root"><div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8"><div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8"><table class="min-w-full divide-y divide-slate-200">`;
+            tableHTML += `<thead><tr>
+                <th scope="col" class="py-3.5 pl-4 pr-3 text-right text-sm font-semibold sm:pl-0" style="color: var(--text-color);">קטגוריה</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold" style="color: var(--text-color);">סכום (₪)</th>
+            </tr></thead>`;
+            tableHTML += `<tbody class="divide-y divide-slate-100">`;
+            for (const [category, total] of sortedCategories) {
+                tableHTML += `<tr>
+                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium sm:pl-0" style="color: var(--text-color);">${category}</td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-slate-500 text-left font-mono">${total.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                </tr>`;
+            }
+            tableHTML += `</tbody></table></div></div></div>`;
+            tableContainer.innerHTML = tableHTML;
+        }
+
+        async function updateOwnerComparisonChart(expenses, canvasId, chartInstance) {
+            const chartCanvas = document.getElementById(canvasId);
+            if (!chartCanvas) return chartInstance;
+            const parentSection = chartCanvas.closest('section');
+            const totalContainer = document.getElementById(`comparison-total-${activeTab}`);
+
+            if (expenses.length === 0) {
+                if (chartInstance) chartInstance.destroy();
+                parentSection.style.display = 'none';
+                return null;
+            }
+            parentSection.style.display = 'block';
+
+            const ownerTotals = {};
+            let grandTotal = 0;
+            for (const exp of expenses) {
+                const amountInILS = await convertToILS(exp.amount, exp.currency);
+                ownerTotals[exp.ownerName] = (ownerTotals[exp.ownerName] || 0) + amountInILS;
+                grandTotal += amountInILS;
+            }
+
+            totalContainer.textContent = `סה"כ: ${grandTotal.toLocaleString('he-IL', { style: 'currency', currency: 'ILS' })}`;
+
+            const labels = Object.keys(ownerTotals);
+            const data = Object.values(ownerTotals);
+            const chartColors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308', '#64748b', '#ec4899', '#10b981', '#f59e0b'];
+            
+            const chartConfig = {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data, backgroundColor: chartColors, borderColor: currentTheme.cardBgColor || '#fff', borderWidth: 4 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '60%',
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { family: "'Assistant', sans-serif" }, color: currentTheme.textColor || '#334155', boxWidth: 20, padding: 20 } },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const percentage = grandTotal > 0 ? ((value / grandTotal) * 100).toFixed(1) : 0;
+                                    return ` ${label}: ${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(value)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            if (chartInstance) {
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = data;
+                chartInstance.options.plugins.legend.labels.color = currentTheme.textColor;
+                chartInstance.data.datasets[0].borderColor = currentTheme.cardBgColor;
+                chartInstance.update();
+                return chartInstance;
+            } else {
+                return new Chart(chartCanvas, chartConfig);
+            }
+        }
+        
+        function populateComparisonCategoryFilter(expenses, tabId) {
+            const select = document.getElementById(`comparison-category-filter-${tabId}`);
+            const uniqueCategories = [...new Set(expenses.map(exp => exp.category))];
+            
+            let optionsHTML = `<option value="all">כל הקטגוריות</option>`;
+            uniqueCategories.forEach(cat => {
+                optionsHTML += `<option value="${cat}" ${activeComparisonCategory === cat ? 'selected' : ''}>${cat}</option>`;
+            });
+            select.innerHTML = optionsHTML;
+        }
+
+        // --- Currency Conversion API & Helpers ---
+        async function prefetchAllCurrencyRates(expenses) {
+            const uniqueCurrencies = [...new Set(expenses.map(e => e.currency))];
+            const promises = uniqueCurrencies
+                .filter(c => c !== 'ILS' && !rateCache[`${c}-ILS`])
+                .map(c => getRate(c, 'ILS'));
+            await Promise.all(promises);
+        }
+
+        async function getRate(from, to) {
+            if (from === to) return 1;
+            const cacheKey = `${from}-${to}`;
+            if (rateCache[cacheKey]) return rateCache[cacheKey];
+            try {
+                const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+                if (!res.ok) throw new Error('API error');
+                const data = await res.json();
+                const rate = data.rates[to];
+                if (typeof rate !== 'number') return 1;
+                rateCache[cacheKey] = rate;
+                return rate;
+            } catch (error) {
+                console.error('Failed to fetch currency rate:', error);
+                return 1; // Fallback rate
+            }
+        }
+        
+        async function convertToILS(amount, currency) {
+            if (currency === 'ILS') return amount;
+            const rate = rateCache[`${currency}-ILS`] || await getRate(currency, 'ILS');
+            return amount * rate;
+        }
+
+        async function displayConvertedAmount(elementId, amount, from, isTable = false) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            el.innerHTML = `<span class="loader"></span>`;
+            const convertedAmount = await convertToILS(amount, from);
+            const formattedAmount = convertedAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            el.textContent = isTable ? formattedAmount : `(₪${formattedAmount})`;
+        }
+
+        // --- Dropdown Population ---
+        function populateCurrencyDropdown() {
+            const expenseCurrency = document.getElementById('expense-currency');
+            const fragment = document.createDocumentFragment();
+            prioritizedCurrencies.forEach(code => {
+                const opt = document.createElement('option');
+                opt.value = code;
+                opt.textContent = `${code} — ${currencies[code]}`;
+                fragment.appendChild(opt);
+            });
+            const otherCurrencies = Object.keys(currencies).filter(c => !prioritizedCurrencies.includes(c)).sort();
+            otherCurrencies.forEach(code => {
+                const opt = document.createElement('option');
+                opt.value = code;
+                opt.textContent = `${code} — ${currencies[code]}`;
+                fragment.appendChild(opt);
+            });
+            expenseCurrency.appendChild(fragment);
+        }
+
+        function populateCategoryDropdown() {
+            const expenseCategory = document.getElementById('expense-category');
+            expenseCategory.innerHTML = trackerCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('') + '<option value="add_new_category">➕ הוסף חדשה...</option>';
+        }
+
+        // --- Modal & Form Logic ---
+        function openModal(modalId) { document.getElementById(modalId)?.classList.remove('modal-hidden'); }
+        function closeModal(modalId) { document.getElementById(modalId)?.classList.add('modal-hidden'); }
+
+        function openExpenseModal(expense = null) {
+            const expenseForm = document.getElementById('expense-form');
+            expenseForm.reset();
+            document.getElementById('new-category-wrapper').classList.add('hidden');
+            document.getElementById('delete-category-btn').classList.add('hidden');
+
+            if (expense) {
+                document.getElementById('modal-title').textContent = 'עריכת הוצאה';
+                const expenseDocRef = doc(db, "trackers", trackerId, "expenses", expense.id); // Changed from "trips"
+                getDoc(expenseDocRef).then(docSnap => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        document.getElementById('expense-id').value = expense.id;
+                        document.getElementById('expense-owner-name').value = data.ownerName || '';
+                        document.getElementById('expense-amount').value = data.amount;
+                        document.getElementById('expense-currency').value = data.currency;
+                        document.getElementById('expense-category').value = data.category;
+                        document.getElementById('expense-date').value = data.date;
+                        document.getElementById('expense-notes').value = data.notes || '';
+                    }
+                });
+            } else {
+                document.getElementById('modal-title').textContent = 'הוספת הוצאה חדשה';
+                document.getElementById('expense-id').value = '';
+                const lastOwner = localStorage.getItem('lastExpenseOwner');
+                document.getElementById('expense-owner-name').value = lastOwner || (currentUserProfile ? currentUserProfile.displayName : '');
+                document.getElementById('expense-date').valueAsDate = new Date();
+            }
+            openModal('expense-modal');
+        }
+        
+        async function openExpenseDetailsModal(expenseId) {
+            const expense = allExpenses.find(exp => exp.id === expenseId);
+            if (!expense) return;
+
+            const contentEl = document.getElementById('expense-details-content');
+            
+            const detailsHTML = `
+                <div class="grid grid-cols-3 gap-x-4 gap-y-3">
+                    <p class="text-sm text-slate-500 col-span-1">מוציא:</p>
+                    <p class="font-semibold col-span-2">${expense.ownerName || 'לא ידוע'}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">קטגוריה:</p>
+                    <p class="font-semibold col-span-2">${expense.category}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">פירוט:</p>
+                    <p class="font-semibold col-span-2">${expense.notes || '---'}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">תאריך:</p>
+                    <p class="font-semibold col-span-2">${new Date(expense.date).toLocaleDateString('he-IL')}</p>
+
+                    <p class="text-sm text-slate-500 col-span-1">שעת הוספה:</p>
+                    <p class="font-semibold col-span-2">${expense.createdAt && expense.createdAt.toDate ? expense.createdAt.toDate().toLocaleTimeString('he-IL') : 'לא ידוע'}</p>
+                </div>
+                <div class="pt-3 border-t mt-3 space-y-3">
+                    <div class="grid grid-cols-3 gap-x-4">
+                        <p class="text-sm text-slate-500 col-span-1">סכום מקורי:</p>
+                        <p class="font-bold text-red-600 col-span-2">${expense.amount.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${expense.currency}</p>
+                    </div>
+                    <div id="details-conversion-row" class="grid grid-cols-3 gap-x-4">
+                        <p class="text-sm text-slate-500 col-span-1">סכום בשקלים:</p>
+                        <p class="font-bold col-span-2" id="details-converted-amount" style="color: var(--accent-color);"><span class="loader"></span></p>
+                    </div>
+                </div>
+            `;
+            contentEl.innerHTML = detailsHTML;
+
+            if (expense.currency === 'ILS') {
+                document.getElementById('details-conversion-row').style.display = 'none';
+            } else {
+                document.getElementById('details-conversion-row').style.display = 'grid';
+                const convertedAmount = await convertToILS(expense.amount, expense.currency);
+                document.getElementById('details-converted-amount').textContent = `₪${convertedAmount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+
+            openModal('expense-details-modal');
+        }
+
+        // --- Settings Modal Logic (Simplified) ---
+        function openSettingsModal() {
+            if (!currentUserProfile) return;
+            openModal('settings-modal');
+        }
+
+        async function handleExpenseFormSubmit(e) {
+            e.preventDefault();
+            const expenseCategory = document.getElementById('expense-category');
+            let category = expenseCategory.value;
+
+            if (category === 'add_new_category') {
+                const newCategoryName = document.getElementById('new-category-name').value.trim();
+                if (newCategoryName && !trackerCategories.includes(newCategoryName)) {
+                    const updatedCategories = [...trackerCategories, newCategoryName];
+                    await setDoc(doc(db, "trackers", trackerId, "settings", "categories"), { list: updatedCategories }); // Changed from "trips"
+                    category = newCategoryName;
+                } else { return; }
+            }
+
+            const ownerName = document.getElementById('expense-owner-name').value.trim();
+            const expenseData = {
+                ownerName: ownerName,
+                amount: parseFloat(document.getElementById('expense-amount').value),
+                currency: document.getElementById('expense-currency').value,
+                category: category,
+                date: document.getElementById('expense-date').value,
+                notes: document.getElementById('expense-notes').value.trim(),
+                ownerId: currentUserProfile.uid,
+            };
+
+            try {
+                const id = document.getElementById('expense-id').value;
+                if (id) {
+                    await updateDoc(doc(db, "trackers", trackerId, "expenses", id), expenseData); // Changed from "trips"
+                } else {
+                    expenseData.createdAt = serverTimestamp();
+                    await addDoc(collection(db, "trackers", trackerId, "expenses"), expenseData); // Changed from "trips"
+                }
+                localStorage.setItem('lastExpenseOwner', ownerName);
+                closeModal('expense-modal');
+            } catch (error) { console.error("Error saving expense:", error); }
+        }
+        
+        async function handleDeleteCategory() {
+            const categoryToDelete = document.getElementById('expense-category').value;
+            if (!categoryToDelete || defaultCategories.includes(categoryToDelete)) return;
+            if (confirm(`האם למחוק את הקטגוריה "${categoryToDelete}"?`)) {
+                const updatedCategories = trackerCategories.filter(c => c !== categoryToDelete);
+                await setDoc(doc(db, "trackers", trackerId, "settings", "categories"), { list: updatedCategories }); // Changed from "trips"
+            }
+        }
+        
+        async function handleDeleteExpense(id) {
+            if (confirm('האם אתה בטוח שברצונך למחוק הוצאה זו?')) {
+                await deleteDoc(doc(db, "trackers", trackerId, "expenses", id)); // Changed from "trips"
+            }
+        }
+
+        // --- Theme Logic ---
+        const themes = {
+            dynamic: [
+                { name: 'autoDayNight', displayName: '☀️ יום ולילה 🌙', isDynamic: true },
+                { name: 'autoSeasonal', displayName: '🍂 עונות השנה 🌷', isDynamic: true },
+            ],
+            static: [
+                { name: 'defaultLight', displayName: 'בהיר', colors: { bgColor: '#f1f5f9', cardBgColor: '#ffffff', textColor: '#334155', accentColor: '#3b82f6' } },
+                { name: 'defaultDark', displayName: 'כהה', colors: { bgColor: '#1e293b', cardBgColor: '#334155', textColor: '#f1f5f9', accentColor: '#60a5fa' } },
+                { name: 'warm', displayName: 'חמים', colors: { bgColor: '#fefce8', cardBgColor: '#fef3c7', textColor: '#92400e', accentColor: '#f59e0b' } },
+                { name: 'bubble', displayName: 'בועות', colors: { bgColor: '#0b1120', cardBgColor: 'rgba(255, 255, 255, 0.1)', textColor: '#e0e7ff', accentColor: '#818cf8' }, bgStyle: 'radial-gradient(circle at 100% 100%, #1e3a8a, #0c152e), radial-gradient(circle at 0% 0%, #312e81, #0c152e)' },
+                { name: 'forest', displayName: 'יער', colors: { bgColor: '#f0fdf4', cardBgColor: '#ffffff', textColor: '#14532d', accentColor: '#22c55e' } },
+                { name: 'ocean', displayName: 'אוקיינוס', colors: { bgColor: '#0c243b', cardBgColor: '#183d5d', textColor: '#eff6ff', accentColor: '#38bdf8' } },
+                { name: 'rose', displayName: 'ורוד', colors: { bgColor: '#fff1f2', cardBgColor: '#ffffff', textColor: '#831843', accentColor: '#f43f5e' } },
+                { name: 'slate', displayName: 'צפחה', colors: { bgColor: '#f8fafc', cardBgColor: '#ffffff', textColor: '#334155', accentColor: '#64748b' } },
+                { name: 'mint', displayName: 'מנטה', colors: { bgColor: '#f0fdfa', cardBgColor: '#ccfbf1', textColor: '#134e4a', accentColor: '#2dd4bf' } },
+                { name: 'sunset', displayName: 'שקיעה', colors: { bgColor: '#312e81', cardBgColor: '#4338ca', textColor: '#e0e7ff', accentColor: '#f59e0b' }, bgStyle: 'linear-gradient(to top, #312e81, #7c3aed, #f59e0b)' },
+                { name: 'newspaper', displayName: 'עיתון', colors: { bgColor: '#f5f5f4', cardBgColor: '#ffffff', textColor: '#1c1917', accentColor: '#ef4444' } },
+                { name: 'cyberpunk', displayName: 'סייברפאנק', colors: { bgColor: '#000000', cardBgColor: '#1a1a1a', textColor: '#00ff00', accentColor: '#ff00ff' } },
+                { name: 'lavender', displayName: 'לבנדר', colors: { bgColor: '#f5f3ff', cardBgColor: '#ede9fe', textColor: '#5b21b6', accentColor: '#8b5cf6' } },
+                { name: 'sand', displayName: 'חול', colors: { bgColor: '#fdf6e3', cardBgColor: '#fcfbf5', textColor: '#654321', accentColor: '#d2b48c' } },
+                { name: 'sky', displayName: 'שמיים', colors: { bgColor: '#e0f2fe', cardBgColor: '#f0f9ff', textColor: '#0c4a6e', accentColor: '#38bdf8' } },
+                { name: 'cherry', displayName: 'דובדבן', colors: { bgColor: '#4c0519', cardBgColor: '#750e2b', textColor: '#fecdd3', accentColor: '#f43f5e' } },
+                { name: 'matcha', displayName: 'מאצ׳ה', colors: { bgColor: '#f7fee7', cardBgColor: '#eaffd4', textColor: '#3f6212', accentColor: '#84cc16' } },
+                { name: 'graphite', displayName: 'גרפיט', colors: { bgColor: '#171717', cardBgColor: '#262626', textColor: '#d4d4d4', accentColor: '#a3a3a3' } },
+                { name: 'peach', displayName: 'אפרסק', colors: { bgColor: '#fff7ed', cardBgColor: '#ffedd5', textColor: '#9a3412', accentColor: '#fb923c' } },
+                { name: 'royal', displayName: 'מלכותי', colors: { bgColor: '#1e1b4b', cardBgColor: '#312e81', textColor: '#e0e7ff', accentColor: '#eab308' } },
+            ]
+        };
+
+        function getDynamicThemeColors(themeName) {
+            const hour = new Date().getHours();
+            if (themeName === 'autoDayNight') {
+                if (hour >= 6 && hour < 18) return { name: 'autoDayNight', displayName: '☀️ יום', colors: { bgColor: '#f1f5f9', cardBgColor: '#ffffff', textColor: '#334155', accentColor: '#3b82f6' } }; // Day
+                return { name: 'autoDayNight', displayName: '🌙 לילה', colors: { bgColor: '#1e293b', cardBgColor: '#334155', textColor: '#f1f5f9', accentColor: '#60a5fa' } }; // Night
+            }
+            if (themeName === 'autoSeasonal') {
+                const month = new Date().getMonth(); // 0-11
+                if (month >= 2 && month <= 4) return { name: 'autoSeasonal', displayName: '🌷 אביב', colors: { bgColor: '#f0fdf4', cardBgColor: '#dcfce7', textColor: '#166534', accentColor: '#4ade80' } }; // Spring
+                if (month >= 5 && month <= 7) return { name: 'autoSeasonal', displayName: '☀️ קיץ', colors: { bgColor: '#fefce8', cardBgColor: '#fef9c3', textColor: '#854d0e', accentColor: '#facc15' } }; // Summer
+                if (month >= 8 && month <= 10) return { name: 'autoSeasonal', displayName: '🍂 סתיו', colors: { bgColor: '#fff7ed', cardBgColor: '#ffedd5', textColor: '#9a3412', accentColor: '#fb923c' } }; // Autumn
+                return { name: 'autoSeasonal', displayName: '❄️ חורף', colors: { bgColor: '#f0f9ff', cardBgColor: '#e0f2fe', textColor: '#0c4a6e', accentColor: '#38bdf8' } }; // Winter
+            }
+            return null;
+        }
+
+        function populateThemes() {
+            const dynamicContainer = document.getElementById('dynamic-themes-container');
+            const staticContainer = document.getElementById('preset-themes-container');
+            
+            themes.dynamic.forEach(theme => {
+                const currentDynamic = getDynamicThemeColors(theme.name);
+                const btn = document.createElement('button');
+                btn.className = 'theme-preset-btn p-2 rounded-lg border-2 border-transparent text-sm';
+                btn.dataset.themeName = theme.name;
+                btn.dataset.isDynamic = "true";
+                btn.innerHTML = `<span class="block w-full h-8 rounded mb-1" style="background: linear-gradient(45deg, ${currentDynamic.colors.bgColor} 50%, ${currentDynamic.colors.cardBgColor} 50%);"></span>${theme.displayName}`;
+                dynamicContainer.appendChild(btn);
+            });
+
+            themes.static.forEach(theme => {
+                const btn = document.createElement('button');
+                btn.className = 'theme-preset-btn p-2 rounded-lg border-2 border-transparent text-sm';
+                btn.dataset.themeName = theme.name;
+                btn.innerHTML = `<span class="block w-full h-8 rounded mb-1" style="background: ${theme.bgStyle || `linear-gradient(45deg, ${theme.colors.bgColor} 50%, ${theme.colors.cardBgColor} 50%)`};"></span>${theme.displayName}`;
+                staticContainer.appendChild(btn);
+            });
+        }
+
+        function applyTheme(themeConfig) {
+            document.documentElement.style.setProperty('--bg-color', themeConfig.colors.bgColor);
+            document.documentElement.style.setProperty('--card-bg-color', themeConfig.colors.cardBgColor);
+            document.documentElement.style.setProperty('--text-color', themeConfig.colors.textColor);
+            document.documentElement.style.setProperty('--accent-color', themeConfig.colors.accentColor);
+
+            if (themeConfig.bgStyle) {
+                document.body.style.background = themeConfig.bgStyle;
+            } else {
+                document.body.style.background = '';
+            }
+            
+            const headerBgColor = themeConfig.colors.bgColor === themeConfig.colors.cardBgColor ? themeConfig.colors.bgColor : themeConfig.colors.cardBgColor;
+            document.documentElement.style.setProperty('--header-bg-color', headerBgColor);
+
+            document.getElementById('main-content').className = `layout-${themeConfig.layout}`;
+            
+            document.getElementById('bg-color-picker').value = themeConfig.colors.bgColor;
+            document.getElementById('card-bg-color-picker').value = themeConfig.colors.cardBgColor;
+            document.getElementById('text-color-picker').value = themeConfig.colors.textColor;
+            document.getElementById('accent-color-picker').value = themeConfig.colors.accentColor;
+            
+            const layoutRadio = document.querySelector(`input[name="layout-style"][value="${themeConfig.layout}"]`);
+            if (layoutRadio) layoutRadio.checked = true;
+
+            document.querySelectorAll('.theme-preset-btn').forEach(btn => {
+                btn.classList.remove('border-green-500', 'ring-2', 'ring-green-500');
+                if (btn.dataset.themeName === themeConfig.name) {
+                    btn.classList.add('border-green-500', 'ring-2', 'ring-green-500');
+                }
+            });
+
+            currentTheme = themeConfig.colors;
+            if (expensesChartToday) { expensesChartToday.destroy(); expensesChartToday = null; }
+            if (expensesChartAll) { expensesChartAll.destroy(); expensesChartAll = null; }
+            if (ownerComparisonChartToday) { ownerComparisonChartToday.destroy(); ownerComparisonChartToday = null; }
+            if (ownerComparisonChartAll) { ownerComparisonChartAll.destroy(); ownerComparisonChartAll = null; }
+            scheduleRender();
+        }
+
+        function saveTheme(themeToSave) {
+            localStorage.setItem(`trackerTheme_${trackerId}`, JSON.stringify(themeToSave)); // Changed key
+            loadTheme();
+        }
+
+        function loadTheme() {
+            if (themeUpdateInterval) clearInterval(themeUpdateInterval);
+            const savedTheme = JSON.parse(localStorage.getItem(`trackerTheme_${trackerId}`)); // Changed key
+            
+            const defaultTheme = {
+                layout: 'cards',
+                name: 'defaultLight',
+            };
+
+            const themeIdentifier = savedTheme || defaultTheme;
+            let themeConfig;
+
+            if (themeIdentifier.name === 'custom') {
+                themeConfig = themeIdentifier;
+            } else {
+                const staticTheme = themes.static.find(t => t.name === themeIdentifier.name);
+                if (staticTheme) {
+                    themeConfig = { ...staticTheme, layout: themeIdentifier.layout };
+                } else {
+                    const dynamicTheme = getDynamicThemeColors(themeIdentifier.name);
+                    if (dynamicTheme) {
+                        themeConfig = { ...dynamicTheme, layout: themeIdentifier.layout };
+                        themeUpdateInterval = setInterval(loadTheme, 60000);
+                    } else {
+                        themeConfig = { ...themes.static[0], layout: 'cards' };
+                    }
+                }
+            }
+            applyTheme(themeConfig);
+        }
+
+        // --- PDF Export Logic ---
+        async function generateReportHTML() {
+            const owners = [...new Set(allExpenses.map(exp => exp.ownerName).filter(Boolean))];
+            let reportHtml = `
+                <div style="font-family: 'Assistant', sans-serif; direction: rtl; text-align: right; padding: 20px; background-color: #fff; color: #333;">
+                    <h1 style="font-size: 24px; font-weight: bold; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; margin-bottom: 20px;">דוח הוצאות: ${trackerDetails.name || ''}</h1>
+            `;
+
+            const allExpensesSorted = [...allExpenses].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const categorySummary = {};
+            
+            for (const owner of owners) {
+                reportHtml += `<h2 style="font-size: 20px; font-weight: bold; margin-top: 30px; margin-bottom: 15px;">סיכום עבור: ${owner}</h2>`;
+                const ownerExpenses = allExpensesSorted.filter(exp => exp.ownerName === owner);
+                
+                reportHtml += `
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                        <thead>
+                            <tr style="background-color: #f1f5f9;">
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">תאריך</th>
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">קטגוריה</th>
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">פירוט</th>
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">סכום</th>
+                                <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">סכום (₪)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                const ownerCategorySummary = {};
+                for (const exp of ownerExpenses) {
+                    const amountInILS = await convertToILS(exp.amount, exp.currency);
+                    ownerCategorySummary[exp.category] = (ownerCategorySummary[exp.category] || 0) + amountInILS;
+                    categorySummary[exp.category] = (categorySummary[exp.category] || 0) + amountInILS;
+                    reportHtml += `
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #ddd;">${new Date(exp.date).toLocaleDateString('he-IL')}</td>
+                            <td style="padding: 8px; border: 1px solid #ddd;">${exp.category}</td>
+                            <td style="padding: 8px; border: 1px solid #ddd;">${exp.notes || ''}</td>
+                            <td style="padding: 8px; border: 1px solid #ddd; text-align: left; font-family: monospace;">${exp.amount.toFixed(2)} ${exp.currency}</td>
+                            <td style="padding: 8px; border: 1px solid #ddd; text-align: left; font-family: monospace;">${amountInILS.toFixed(2)}</td>
+                        </tr>
+                    `;
+                }
+                reportHtml += '</tbody></table>';
+
+                reportHtml += `<h3 style="font-size: 16px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;">סיכום לפי קטגוריות (${owner})</h3>`;
+                reportHtml += '<table style="width: 50%; border-collapse: collapse;"><tbody>';
+                let ownerTotal = 0;
+                for (const [cat, total] of Object.entries(ownerCategorySummary).sort(([,a],[,b]) => b-a)) {
+                    ownerTotal += total;
+                    reportHtml += `<tr><td style="padding: 6px; border-bottom: 1px solid #eee;">${cat}</td><td style="padding: 6px; border-bottom: 1px solid #eee; text-align: left; font-family: monospace;">${total.toFixed(2)} ₪</td></tr>`;
+                }
+                reportHtml += `<tr style="font-weight: bold; background-color: #f1f5f9;"><td style="padding: 8px;">סה"כ</td><td style="padding: 8px; text-align: left; font-family: monospace;">${ownerTotal.toFixed(2)} ₪</td></tr>`;
+                reportHtml += '</tbody></table>';
+            }
+
+            if (owners.length > 1) {
+                reportHtml += `<h2 style="font-size: 20px; font-weight: bold; margin-top: 40px; margin-bottom: 15px; border-top: 2px solid #3b82f6; padding-top: 20px;">סיכום כללי</h2>`;
+                reportHtml += '<table style="width: 50%; border-collapse: collapse;"><tbody>';
+                let grandTotal = 0;
+                for (const [cat, total] of Object.entries(categorySummary).sort(([,a],[,b]) => b-a)) {
+                    grandTotal += total;
+                    reportHtml += `<tr><td style="padding: 6px; border-bottom: 1px solid #eee;">${cat}</td><td style="padding: 6px; border-bottom: 1px solid #eee; text-align: left; font-family: monospace;">${total.toFixed(2)} ₪</td></tr>`;
+                }
+                reportHtml += `<tr style="font-weight: bold; background-color: #f1f5f9;"><td style="padding: 8px;">סה"כ כללי</td><td style="padding: 8px; text-align: left; font-family: monospace;">${grandTotal.toFixed(2)} ₪</td></tr>`;
+                reportHtml += '</tbody></table>';
+            }
+
+            reportHtml += '</div>';
+            return reportHtml;
+        }
+
+        async function exportToPdf() {
+            const loadingText = document.getElementById('loading-text');
+            loadingText.textContent = 'מכין את הדוח...';
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-overlay').classList.remove('opacity-0');
+
+            const reportHTML = await generateReportHTML();
+
+            const reportContainer = document.createElement('div');
+            reportContainer.style.position = 'absolute';
+            reportContainer.style.left = '-9999px';
+            reportContainer.style.width = '800px';
+            reportContainer.innerHTML = reportHTML;
+            document.body.appendChild(reportContainer);
+
+            try {
+                const canvas = await html2canvas(reportContainer, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'pt',
+                    format: 'a4'
+                });
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+                const ratio = imgWidth / imgHeight;
+                
+                const finalImgWidth = pdfWidth - 40;
+                const finalImgHeight = finalImgWidth / ratio;
+                
+                let heightLeft = finalImgHeight;
+                let position = 20;
+
+                pdf.addImage(imgData, 'PNG', 20, position, finalImgWidth, finalImgHeight);
+                heightLeft -= (pdfHeight - 40);
+
+                while (heightLeft > 0) {
+                    position = heightLeft - finalImgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 20, position, finalImgWidth, finalImgHeight);
+                    heightLeft -= (pdfHeight - 40);
+                }
+
+                pdf.save(`expense-report-${trackerId}.pdf`);
+
+            } catch(error) {
+                console.error("Error generating PDF:", error);
+                alert("אירעה שגיאה ביצירת ה-PDF.");
+            } finally {
+                document.body.removeChild(reportContainer);
+                loadingText.textContent = 'טוען הוצאות...';
+                hideLoadingOverlay();
+            }
+        }
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            document.getElementById('add-expense-btn-header').addEventListener('click', () => openExpenseModal());
+            document.getElementById('add-first-expense-btn').addEventListener('click', () => openExpenseModal());
+            document.getElementById('settings-btn').addEventListener('click', openSettingsModal);
+            document.getElementById('export-pdf-btn').addEventListener('click', exportToPdf);
+            document.getElementById('expense-form').addEventListener('submit', handleExpenseFormSubmit);
+            
+            document.querySelectorAll('[data-close-modal]').forEach(btn => {
+                btn.addEventListener('click', () => closeModal(btn.dataset.closeModal));
+            });
+
+            document.querySelectorAll('.tab-btn').forEach(tab => {
+                tab.addEventListener('click', async () => {
+                    activeTab = tab.dataset.tab;
+                    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    document.getElementById(`tab-${activeTab}`).classList.add('active');
+                    await scheduleRender();
+                });
+            });
+
+            document.querySelectorAll('.filter-btn').forEach(filter => {
+                filter.addEventListener('click', async () => {
+                    activeFilter = filter.dataset.filter;
+                    document.querySelectorAll('.filter-btn').forEach(f => f.classList.remove('active'));
+                    filter.classList.add('active');
+                    await scheduleRender();
+                });
+            });
+            
+            document.body.addEventListener('click', async (e) => {
+                const editBtn = e.target.closest('.edit-btn');
+                if (editBtn) {
+                    e.stopPropagation();
+                    openExpenseModal({ id: editBtn.dataset.id });
+                    return;
+                }
+
+                const deleteBtn = e.target.closest('.delete-btn');
+                if (deleteBtn) {
+                    e.stopPropagation();
+                    handleDeleteExpense(deleteBtn.dataset.id);
+                    return;
+                }
+
+                const ownerBtn = e.target.closest('.owner-filter-btn');
+                if (ownerBtn) {
+                    const owner = ownerBtn.dataset.owner;
+                    if(owner === 'compare') {
+                        comparisonViewActive = true;
+                    } else {
+                        comparisonViewActive = false;
+                        activeOwner = owner;
+                    }
+                    await scheduleRender();
+                    return;
+                }
+                
+                const card = e.target.closest('.expense-card-clickable');
+                if (card) {
+                    openExpenseDetailsModal(card.dataset.id);
+                }
+                
+                const categoryHeader = e.target.closest('.category-header');
+                if (categoryHeader) {
+                    const content = categoryHeader.nextElementSibling;
+                    const icon = categoryHeader.querySelector('i');
+                    content.classList.toggle('expanded');
+                    icon.classList.toggle('rotate-180');
+                }
+            });
+
+            const expenseCategorySelect = document.getElementById('expense-category');
+            expenseCategorySelect.addEventListener('change', () => {
+                const isAddNew = expenseCategorySelect.value === 'add_new_category';
+                document.getElementById('new-category-wrapper').classList.toggle('hidden', !isAddNew);
+                const isCustom = !defaultCategories.includes(expenseCategorySelect.value) && !isAddNew;
+                document.getElementById('delete-category-btn').classList.toggle('hidden', !isCustom);
+            });
+            
+            document.getElementById('delete-category-btn').addEventListener('click', handleDeleteCategory);
+            
+            document.getElementById('comparison-category-filter-today').addEventListener('change', async (e) => {
+                activeComparisonCategory = e.target.value;
+                await scheduleRender();
+            });
+            document.getElementById('comparison-category-filter-all').addEventListener('change', async (e) => {
+                activeComparisonCategory = e.target.value;
+                await scheduleRender();
+            });
+
+            // Theme control event listeners
+            document.querySelectorAll('input[name="layout-style"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const savedTheme = JSON.parse(localStorage.getItem(`trackerTheme_${trackerId}`)) || { name: 'defaultLight', layout: 'cards' };
+                    savedTheme.layout = e.target.value;
+                    saveTheme(savedTheme);
+                });
+            });
+
+            ['bg-color-picker', 'card-bg-color-picker', 'text-color-picker', 'accent-color-picker'].forEach(id => {
+                document.getElementById(id).addEventListener('input', () => {
+                    const theme = {
+                        name: 'custom',
+                        layout: document.querySelector('input[name="layout-style"]:checked').value,
+                        colors: {
+                            bgColor: document.getElementById('bg-color-picker').value,
+                            cardBgColor: document.getElementById('card-bg-color-picker').value,
+                            textColor: document.getElementById('text-color-picker').value,
+                            accentColor: document.getElementById('accent-color-picker').value
+                        }
+                    };
+                    saveTheme(theme);
+                });
+            });
+            
+            document.getElementById('settings-modal').addEventListener('click', (e) => {
+                const themeBtn = e.target.closest('.theme-preset-btn');
+                if (themeBtn) {
+                    const themeName = themeBtn.dataset.themeName;
+                    const layout = document.querySelector('input[name="layout-style"]:checked').value;
+                    saveTheme({ name: themeName, layout: layout });
+                }
+            });
+        }
+
+        // --- Start the application ---
+        initPage();
+    </script>
+</body>
+</html>
+
