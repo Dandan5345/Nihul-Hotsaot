@@ -1,0 +1,24 @@
+{
+  "name": "מעקב הוצאות",
+  "short_name": "מעקב הוצאות",
+  "description": "אפליקציה פשוטה לניהול ומעקב אחר הוצאות אישיות.",
+  "icons": [
+    {
+      "src": "https://i.imgur.com/fqYdoyg.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://i.imgur.com/qPPo1su.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/Nihul-Hotsaot/index.html",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#4f46e5",
+  "scope": "/Nihul-Hotsaot/"
+}
+
+
